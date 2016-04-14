@@ -32,7 +32,7 @@ class ProMP(object):
     def num_demos(self):
         return self.Y.shape[0]
 
-    def add_viapoint(self, t=0.7, obsy=5, sigmay=.1**2):
+    def add_viapoint(self, t, obsy, sigmay=.1**2):
         """
         Add a viapoint to the trajectory
         Observations and corresponding basis activations
@@ -49,10 +49,10 @@ class ProMP(object):
         self.newMu = self.meanW + np.dot(np.dot(self.sigmaW,PhiT.T) * 1/aux, (obsy - np.dot(PhiT, self.meanW.T)))   # new weight mean conditioned on observations
         self.newSigma = self.sigmaW - np.dot(np.dot(self.sigmaW, PhiT.T) * 1/aux, np.dot(PhiT, self.sigmaW))
 
-    def set_goal(self, obsy=5, sigmay=.1**2):
+    def set_goal(self, obsy, sigmay=.1**2):
         self.add_viapoint(1., obsy, sigmay)
 
-    def set_start(self, obsy=5, sigmay=.1**2):
+    def set_start(self, obsy, sigmay=.1**2):
         self.add_viapoint(0., obsy, sigmay)
 
     def generate_trajectory(self, randomness=True):

@@ -1,7 +1,65 @@
 import numpy as np
 
 
+class NDProMP(object):
+    """
+    n-dimensional ProMP
+    """
+    def __init__(self, num_joints, nrBasis=11, sigma=0.05):
+        """
+
+        :param num_joints: Number of underlying ProMPs
+        :param nrBasis:
+        :param sigma:
+        """
+        if num_joints < 1:
+            raise ValueError("You must declare at least 1 joint in a NDProMP")
+        self._num_joints = num_joints
+        self.promps = [ProMP(nrBasis, sigma)]*num_joints
+
+    @property
+    def num_joints(self):
+        return self._num_joints
+
+    def add_demonstration(self, demonstration):
+        """
+        Add a new N-joints demonstration and update the model
+        :param demonstration: List of "num_joints" demonstrations
+        :return:
+        """
+        if len(demonstration) != self.num_joints:
+            raise ValueError("The given demonstration has {} joints while num_joints={}".format(len(demonstration), self.num_joints))
+
+        for joint_demo_idx, joint_demo in enumerate(demonstration):
+            self.promps[joint_demo_idx].add_demonstration(joint_demo)
+
+    @property
+    def num_demos(self):
+        return self.promps[0].num_demos
+
+    def add_viapoint(self, t, obsy, sigmay=.1 ** 2):
+        for joint_demo in range(self.num_joints):
+            self.promps[joint_demo].add_viapoint(t, obsy, sigmay)
+
+    def set_goal(self, obsy, sigmay=.1 ** 2):
+        for joint_demo in range(self.num_joints):
+            self.promps[joint_demo].set_goal(obsy, sigmay)
+
+    def set_start(self, obsy, sigmay=.1 ** 2):
+        for joint_demo in range(self.num_joints):
+            self.promps[joint_demo].set_start(obsy, sigmay)
+
+    def generate_trajectory(self, randomness=True):
+        trajectory = []
+        for joint_demo in range(self.num_joints):
+            trajectory.append(self.promps[joint_demo].generate_trajectory(randomness))
+        return trajectory
+
+
 class ProMP(object):
+    """
+    Uni-dimensional probabilistic MP
+    """
     def __init__(self, nrBasis=11, sigma=0.05):
         self.x = np.arange(0, 1.01, 0.01)
         self.nrSamples = len(self.x)

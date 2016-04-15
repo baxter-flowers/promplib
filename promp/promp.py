@@ -37,9 +37,16 @@ class NDProMP(object):
     def num_demos(self):
         return self.promps[0].num_demos
 
-    def add_viapoint(self, t, obsy, sigmay=.1 ** 2):
+    def add_viapoint(self, t, obsys, sigmay=.1 ** 2):
+        """
+        Add a viapoint i.e. an observation at a specific time
+        :param t: Time of observation
+        :param obsys: List of observations for each joint
+        :param sigmay:
+        :return:
+        """
         for joint_demo in range(self.num_joints):
-            self.promps[joint_demo].add_viapoint(t, obsy, sigmay)
+            self.promps[joint_demo].add_viapoint(t, obsys[joint_demo], sigmay)
 
     def set_goal(self, obsy, sigmay=.1 ** 2):
         for joint_demo in range(self.num_joints):

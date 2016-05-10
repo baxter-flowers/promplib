@@ -1,5 +1,5 @@
 import numpy as np
-
+from scipy.interpolate import interp1d
 
 class NDProMP(object):
     """
@@ -67,8 +67,8 @@ class ProMP(object):
     """
     Uni-dimensional probabilistic MP
     """
-    def __init__(self, nrBasis=11, sigma=0.05):
-        self.x = np.arange(0, 1.01, 0.01)
+    def __init__(self, nrBasis=11, sigma=0.05, num_samples=500):
+        self.x = np.linspace(0, 1, num_samples)
         self.nrSamples = len(self.x)
         self.nrBasis = nrBasis
         self.sigma = sigma
@@ -85,7 +85,9 @@ class ProMP(object):
         self.newSigma = None
 
     def add_demonstration(self, demonstration):
-        self.Y = np.vstack((self.Y, demonstration))
+        interpolate = interp1d(np.linspace(0, 1, len(demonstration)), demonstration, kind='cubic')
+        stretched_demo = interpolate(self.x)
+        self.Y = np.vstack((self.Y, stretched_demo))
         self.nrTraj = len(self.Y)
         a = np.linalg.inv(np.dot(self.Phi.T, self.Phi))
         b = np.dot(self.Phi.T, self.Y.T)

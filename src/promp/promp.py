@@ -5,7 +5,7 @@ class NDProMP(object):
     """
     n-dimensional ProMP
     """
-    def __init__(self, num_joints, nrBasis=11, sigma=0.05):
+    def __init__(self, num_joints, nrBasis=11, sigma=0.05, num_samples=500):
         """
 
         :param num_joints: Number of underlying ProMPs
@@ -15,18 +15,24 @@ class NDProMP(object):
         if num_joints < 1:
             raise ValueError("You must declare at least 1 joint in a NDProMP")
         self._num_joints = num_joints
-        self.promps = [ProMP(nrBasis, sigma)]*num_joints
+        self.promps = [ProMP(nrBasis, sigma, num_samples) for joint in range(num_joints)]
 
     @property
     def num_joints(self):
         return self._num_joints
 
+    @property
+    def x(self):
+        return self.promps[0].x
+
     def add_demonstration(self, demonstration):
         """
-        Add a new N-joints demonstration and update the model
+        Add a new N-joints demonstration[time][joint] and update the model
         :param demonstration: List of "num_joints" demonstrations
         :return:
         """
+        demonstration = np.array(demonstration).T  # Revert the representation for each time for each joint, for each joint for each time
+
         if len(demonstration) != self.num_joints:
             raise ValueError("The given demonstration has {} joints while num_joints={}".format(len(demonstration), self.num_joints))
 
@@ -36,6 +42,10 @@ class NDProMP(object):
     @property
     def num_demos(self):
         return self.promps[0].num_demos
+
+    @property
+    def num_points(self):
+        return self.promps[0].num_points
 
     def add_viapoint(self, t, obsys, sigmay=.1 ** 2):
         """
@@ -98,6 +108,10 @@ class ProMP(object):
     @property
     def num_demos(self):
         return self.Y.shape[0]
+
+    @property
+    def num_points(self):
+        return self.Y.shape[1]
 
     def add_viapoint(self, t, obsy, sigmay=.1**2):
         """

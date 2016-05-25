@@ -66,14 +66,14 @@ class NDProMP(object):
             raise ValueError("The given goal state has {} joints while num_joints={}".format(len(obsy), self.num_joints))
 
         for joint_demo in range(self.num_joints):
-            self.promps[joint_demo].set_goal(obsy, sigmay)
+            self.promps[joint_demo].set_goal(obsy[joint_demo], sigmay)
 
     def set_start(self, obsy, sigmay=.1 ** 2):
         if len(obsy) != self.num_joints:
             raise ValueError("The given start state has {} joints while num_joints={}".format(len(obsy), self.num_joints))
 
         for joint_demo in range(self.num_joints):
-            self.promps[joint_demo].set_start(obsy, sigmay)
+            self.promps[joint_demo].set_start(obsy[joint_demo], sigmay)
 
     def generate_trajectory(self, randomness=True):
         trajectory = []
@@ -136,6 +136,7 @@ class ProMP(object):
 
         # Conditioning
         aux = sigmay + np.dot(np.dot(PhiT, self.sigmaW), PhiT.T)
+
         self.newMu = self.meanW + np.dot(np.dot(self.sigmaW,PhiT.T) * 1/aux, (obsy - np.dot(PhiT, self.meanW.T)))   # new weight mean conditioned on observations
         self.newSigma = self.sigmaW - np.dot(np.dot(self.sigmaW, PhiT.T) * 1/aux, np.dot(PhiT, self.sigmaW))
 

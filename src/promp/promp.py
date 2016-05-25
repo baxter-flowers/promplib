@@ -51,18 +51,27 @@ class NDProMP(object):
         """
         Add a viapoint i.e. an observation at a specific time
         :param t: Time of observation
-        :param obsys: List of observations for each joint
+        :param obsys: List of observations obys[joint] for each joint
         :param sigmay:
         :return:
         """
+        if len(obsys) != self.num_joints:
+            raise ValueError("The given viapoint has {} joints while num_joints={}".format(len(obsys), self.num_joints))
+
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].add_viapoint(t, obsys[joint_demo], sigmay)
 
     def set_goal(self, obsy, sigmay=.1 ** 2):
+        if len(obsy) != self.num_joints:
+            raise ValueError("The given goal state has {} joints while num_joints={}".format(len(obsy), self.num_joints))
+
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].set_goal(obsy, sigmay)
 
     def set_start(self, obsy, sigmay=.1 ** 2):
+        if len(obsy) != self.num_joints:
+            raise ValueError("The given start state has {} joints while num_joints={}".format(len(obsy), self.num_joints))
+
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].set_start(obsy, sigmay)
 

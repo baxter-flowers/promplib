@@ -76,11 +76,11 @@ class NDProMP(object):
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].set_start(obsy[joint_demo], sigmay)
 
-    def generate_trajectory(self, randomness=True):
+    def generate_trajectory(self):
         trajectory = []
         for joint_demo in range(self.num_joints):
-            trajectory.append(self.promps[joint_demo].generate_trajectory(randomness))
-        return trajectory
+            trajectory.append(self.promps[joint_demo].generate_trajectory())
+        return np.array(trajectory).T[0]
 
     def plot(self, x=None, joint_names=()):
         for promp_idx, promp in enumerate(self.promps):
@@ -151,12 +151,9 @@ class ProMP(object):
     def set_start(self, obsy, sigmay=1e-6):
         self.add_viapoint(0., obsy, sigmay)
 
-    def generate_trajectory(self, randomness=True):
-        if randomness:
-            sampW = np.random.multivariate_normal(self.newMu, self.newSigma, 1).T
-            return np.dot(self.Phi, sampW)
-        else:
-            return np.dot(self.Phi, self.meanW)
+    def generate_trajectory(self):
+        sampW = np.random.multivariate_normal(self.newMu, self.newSigma, 1).T
+        return np.dot(self.Phi, sampW)
 
     def plot(self, x=None, legend='promp'):
         plt.plot(self.x if x is None else x, self.generate_trajectory(), label=legend)

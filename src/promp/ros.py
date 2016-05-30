@@ -77,15 +77,13 @@ class ProMP(object):
             raise TypeError("ros.ProMP.set_start only accepts RS or JS, got {}".format(type(obsy)))
         self.promp.set_start(map(float, obsy.position), sigmay)
 
-    def generate_trajectory(self, randomness=True, duration=-1):
+    def generate_trajectory(self, duration=-1):
         """
         Generate a new trajectory from the given demonstrations and parameters
-        :param randomness: True if the output trajectory must be randomised
         :param duration: Desired duration, auto if duration < 0
         :return: the generated RobotTrajectory message
         """
-        trajectory_array = self.promp.generate_trajectory(randomness)
-        trajectory_array = array(trajectory_array).T
+        trajectory_array = self.promp.generate_trajectory()
         rt = RobotTrajectory()
         rt.joint_trajectory.joint_names = self.joint_names
         duration = float(self.mean_duration) if duration < 0 else duration

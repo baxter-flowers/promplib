@@ -1,7 +1,7 @@
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from sensor_msgs.msg import JointState
 from moveit_msgs.msg import RobotTrajectory, RobotState
-from numpy import mean, array
+from numpy import mean, array, linspace
 from rospy import Duration
 from matplotlib.pyplot import show
 from .promp import NDProMP
@@ -95,6 +95,6 @@ class ProMP(object):
             rt.joint_trajectory.points.append(jtp)
         return rt
 
-    def plot(self, randomness=True):
-        self.promp.plot(randomness, self.joint_names)
+    def plot(self):
+        self.promp.plot(linspace(0, self.mean_duration, self.num_points), self.joint_names)
         show()

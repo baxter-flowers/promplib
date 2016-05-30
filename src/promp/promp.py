@@ -82,9 +82,9 @@ class NDProMP(object):
             trajectory.append(self.promps[joint_demo].generate_trajectory(randomness))
         return trajectory
 
-    def plot(self, randomness=True, joint_names=()):
+    def plot(self, x=None, joint_names=()):
         for promp_idx, promp in enumerate(self.promps):
-            promp.plot(randomness, "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx])
+            promp.plot(x, "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx])
 
 
 class ProMP(object):
@@ -158,5 +158,5 @@ class ProMP(object):
         else:
             return np.dot(self.Phi, self.meanW)
 
-    def plot(self, randomness=True, legend='promp'):
-        plt.plot(self.x, self.generate_trajectory(randomness=randomness), label=legend)
+    def plot(self, x=None, legend='promp'):
+        plt.plot(self.x if x is None else x, self.generate_trajectory(), label=legend)

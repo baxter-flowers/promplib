@@ -47,7 +47,7 @@ class ProMP(object):
 
     @property
     def mean_duration(self):
-        return mean(self._durations)
+        return float(mean(self._durations))
 
     def add_viapoint(self, t, obsys, sigmay=1e-6):
         """

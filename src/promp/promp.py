@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp1d
+import matplotlib.pyplot as plt
 
 class NDProMP(object):
     """
@@ -81,6 +82,10 @@ class NDProMP(object):
             trajectory.append(self.promps[joint_demo].generate_trajectory(randomness))
         return trajectory
 
+    def plot(self, randomness=True, joint_names=()):
+        for promp_idx, promp in enumerate(self.promps):
+            promp.plot(randomness, "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx])
+
 
 class ProMP(object):
     """
@@ -153,3 +158,5 @@ class ProMP(object):
         else:
             return np.dot(self.Phi, self.meanW)
 
+    def plot(self, randomness=True, legend='promp'):
+        plt.plot(self.x, self.generate_trajectory(randomness=randomness), label=legend)

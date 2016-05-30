@@ -3,6 +3,7 @@ from sensor_msgs.msg import JointState
 from moveit_msgs.msg import RobotTrajectory, RobotState
 from numpy import mean, array
 from rospy import Duration
+from matplotlib.pyplot import show
 from .promp import NDProMP
 
 
@@ -93,3 +94,7 @@ class ProMP(object):
             jtp = JointTrajectoryPoint(positions=map(float, point), time_from_start=Duration(time))
             rt.joint_trajectory.points.append(jtp)
         return rt
+
+    def plot(self, randomness=True):
+        self.promp.plot(randomness, self.joint_names)
+        show()

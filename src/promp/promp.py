@@ -47,7 +47,7 @@ class NDProMP(object):
     def num_points(self):
         return self.promps[0].num_points
 
-    def add_viapoint(self, t, obsys, sigmay=.1 ** 2):
+    def add_viapoint(self, t, obsys, sigmay=1e-6):
         """
         Add a viapoint i.e. an observation at a specific time
         :param t: Time of observation
@@ -61,14 +61,14 @@ class NDProMP(object):
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].add_viapoint(t, obsys[joint_demo], sigmay)
 
-    def set_goal(self, obsy, sigmay=.1 ** 2):
+    def set_goal(self, obsy, sigmay=1e-6):
         if len(obsy) != self.num_joints:
             raise ValueError("The given goal state has {} joints while num_joints={}".format(len(obsy), self.num_joints))
 
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].set_goal(obsy[joint_demo], sigmay)
 
-    def set_start(self, obsy, sigmay=.1 ** 2):
+    def set_start(self, obsy, sigmay=1e-6):
         if len(obsy) != self.num_joints:
             raise ValueError("The given start state has {} joints while num_joints={}".format(len(obsy), self.num_joints))
 
@@ -122,7 +122,7 @@ class ProMP(object):
     def num_points(self):
         return self.Y.shape[1]
 
-    def add_viapoint(self, t, obsy, sigmay=.1**2):
+    def add_viapoint(self, t, obsy, sigmay=1e-6):
         """
         Add a viapoint to the trajectory
         Observations and corresponding basis activations
@@ -140,10 +140,10 @@ class ProMP(object):
         self.newMu = self.meanW + np.dot(np.dot(self.sigmaW,PhiT.T) * 1/aux, (obsy - np.dot(PhiT, self.meanW.T)))   # new weight mean conditioned on observations
         self.newSigma = self.sigmaW - np.dot(np.dot(self.sigmaW, PhiT.T) * 1/aux, np.dot(PhiT, self.sigmaW))
 
-    def set_goal(self, obsy, sigmay=.1**2):
+    def set_goal(self, obsy, sigmay=1e-6):
         self.add_viapoint(1., obsy, sigmay)
 
-    def set_start(self, obsy, sigmay=.1**2):
+    def set_start(self, obsy, sigmay=1e-6):
         self.add_viapoint(0., obsy, sigmay)
 
     def generate_trajectory(self, randomness=True):
@@ -152,3 +152,4 @@ class ProMP(object):
             return np.dot(self.Phi, sampW)
         else:
             return np.dot(self.Phi, self.meanW)
+

@@ -48,7 +48,7 @@ class ProMP(object):
     def mean_duration(self):
         return mean(self._durations)
 
-    def add_viapoint(self, t, obsys, sigmay=.1 ** 2):
+    def add_viapoint(self, t, obsys, sigmay=1e-6):
         """
         Add a viapoint i.e. an observation at a specific time
         :param t: Time of observation
@@ -62,14 +62,14 @@ class ProMP(object):
             raise TypeError("ros.ProMP.add_viapoint only accepts RS or JS, got {}".format(type(obsys)))
         self.promp.add_viapoint(t, map(float, obsys.position), sigmay)
 
-    def set_goal(self, obsy, sigmay=.1 ** 2):
+    def set_goal(self, obsy, sigmay=1e-6):
         if isinstance(obsy, RobotState):
             obsy = obsy.joint_state
         elif not isinstance(obsy, JointState):
             raise TypeError("ros.ProMP.set_goal only accepts RS or JS, got {}".format(type(obsy)))
         self.promp.set_goal(map(float, obsy.position), sigmay)
 
-    def set_start(self, obsy, sigmay=.1 ** 2):
+    def set_start(self, obsy, sigmay=1e-6):
         if isinstance(obsy, RobotState):
             obsy = obsy.joint_state
         elif not isinstance(obsy, JointState):

@@ -17,6 +17,7 @@ class NDProMP(object):
             raise ValueError("You must declare at least 1 joint in a NDProMP")
         self._num_joints = num_joints
         self.promps = [ProMP(nrBasis, sigma, num_samples) for joint in range(num_joints)]
+        self.colors = ['b', 'g', 'r', 'c', 'm', 'y', 'chocolate', 'deepskyblue', 'sage', 'darkviolet', 'crimson']
 
     @property
     def num_joints(self):
@@ -92,7 +93,8 @@ class NDProMP(object):
 
     def plot(self, x=None, joint_names=()):
         for promp_idx, promp in enumerate(self.promps):
-            promp.plot(x, "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx])
+            color = self.colors[promp_idx % len(self.colors)]
+            promp.plot(x, "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx], color)
 
 
 class ProMP(object):
@@ -175,5 +177,8 @@ class ProMP(object):
         sampW = np.random.multivariate_normal(newMu, newSigma, 1).T
         return np.dot(self.Phi, sampW)
 
-    def plot(self, x=None, legend='promp'):
-        plt.plot(self.x if x is None else x, self.generate_trajectory(), label=legend)
+    def plot(self, x=None, legend='promp', color=None):
+        mean = np.dot(self.Phi, self.meanW)
+        plt.plot(self.x if x is None else x, np.dot(self.Phi, self.meanW), color=color, label=legend)
+        std = 2*np.sqrt(np.diag(np.dot(self.Phi, np.dot(self.sigmaW, self.Phi.T))))
+        plt.fill_between(self.x if x is None else x, mean - std, mean + std, color=color, alpha=0.2)

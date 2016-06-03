@@ -46,8 +46,15 @@ class ProMP(object):
         return self.promp.num_points
 
     @property
+    def num_viapoints(self):
+        return self.promp.num_viapoints
+
+    @property
     def mean_duration(self):
         return float(mean(self._durations))
+
+    def clear_viapoints(self):
+        self.promp.clear_viapoints()
 
     def add_viapoint(self, t, obsys, sigmay=1e-6):
         """

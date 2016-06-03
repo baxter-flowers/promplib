@@ -48,6 +48,14 @@ class NDProMP(object):
     def num_points(self):
         return self.promps[0].num_points
 
+    @property
+    def num_viapoints(self):
+        return self.promps[0].num_viapoints
+
+    def clear_viapoints(self):
+        for promp in self.promps:
+            promp.clear_viapoints()
+
     def add_viapoint(self, t, obsys, sigmay=1e-6):
         """
         Add a viapoint i.e. an observation at a specific time
@@ -100,13 +108,12 @@ class ProMP(object):
         self.C = np.arange(0,nrBasis)/(nrBasis-1.0)
         self.Phi = np.exp(-.5 * (np.tile(self.x, (nrBasis, 1)).T - self.C) ** 2 / (sigma ** 2))
 
+        self.viapoints = []
         self.W = np.array([])
         self.nrTraj = 0
         self.meanW = None
         self.sigmaW = None
         self.Y = np.empty((0, self.nrSamples), float)
-        self.newMu = None
-        self.newSigma = None
 
     def add_demonstration(self, demonstration):
         interpolate = interp1d(np.linspace(0, 1, len(demonstration)), demonstration, kind='cubic')
@@ -127,6 +134,13 @@ class ProMP(object):
     def num_points(self):
         return self.Y.shape[1]
 
+    @property
+    def num_viapoints(self):
+        return len(self.viapoints)
+
+    def clear_viapoints(self):
+        del self.viapoints[:]
+
     def add_viapoint(self, t, obsy, sigmay=1e-6):
         """
         Add a viapoint to the trajectory
@@ -136,14 +150,7 @@ class ProMP(object):
         :param sigmay: observation variance (constraint strength)
         :return:
         """
-        PhiT = np.exp(-.5*(np.tile(t, (self.nrBasis,1)).T - self.C)**2/(self.sigma**2))
-        PhiT = PhiT / sum(PhiT)     # basis functions at observed time points
-
-        # Conditioning
-        aux = sigmay + np.dot(np.dot(PhiT, self.sigmaW), PhiT.T)
-
-        self.newMu = self.meanW + np.dot(np.dot(self.sigmaW,PhiT.T) * 1/aux, (obsy - np.dot(PhiT, self.meanW.T)))   # new weight mean conditioned on observations
-        self.newSigma = self.sigmaW - np.dot(np.dot(self.sigmaW, PhiT.T) * 1/aux, np.dot(PhiT, self.sigmaW))
+        self.viapoints.append({"t": t, "obsy": obsy, "sigmay": sigmay})
 
     def set_goal(self, obsy, sigmay=1e-6):
         self.add_viapoint(1., obsy, sigmay)
@@ -152,7 +159,20 @@ class ProMP(object):
         self.add_viapoint(0., obsy, sigmay)
 
     def generate_trajectory(self):
-        sampW = np.random.multivariate_normal(self.newMu, self.newSigma, 1).T
+        newMu = self.meanW
+        newSigma = self.sigmaW
+
+        for viapoint in self.viapoints:
+            PhiT = np.exp(-.5 * (np.tile(viapoint["t"], (self.nrBasis, 1)).T - self.C) ** 2 / (self.sigma ** 2))
+            PhiT = PhiT / sum(PhiT)  # basis functions at observed time points
+
+            # Conditioning
+            aux = viapoint["sigmay"] + np.dot(np.dot(PhiT, newSigma), PhiT.T)
+
+            newMu = newMu + np.dot(np.dot(newSigma, PhiT.T) * 1 / aux, (viapoint["obsy"] - np.dot(PhiT, newMu.T)))  # new weight mean conditioned on observations
+            newSigma = newSigma - np.dot(np.dot(newSigma, PhiT.T) * 1 / aux, np.dot(PhiT, newSigma))
+
+        sampW = np.random.multivariate_normal(newMu, newSigma, 1).T
         return np.dot(self.Phi, sampW)
 
     def plot(self, x=None, legend='promp'):

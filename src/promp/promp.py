@@ -91,10 +91,16 @@ class NDProMP(object):
             trajectory.append(self.promps[joint_demo].generate_trajectory())
         return np.array(trajectory).T[0]
 
-    def plot(self, x=None, joint_names=()):
+    def plot(self, x=None, joint_names=(), generate_trajectory=False):
+        if generate_trajectory:
+            output = self.generate_trajectory().T
+
         for promp_idx, promp in enumerate(self.promps):
             color = self.colors[promp_idx % len(self.colors)]
-            promp.plot(x, "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx], color)
+            joint_name = "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx]
+            promp.plot(x, joint_name, color)
+            if generate_trajectory:
+                plt.plot(x, output[promp_idx], linestyle='--', label="Out {}".format(joint_name), color=color, lw=2)
 
 
 class ProMP(object):
@@ -179,6 +185,10 @@ class ProMP(object):
 
     def plot(self, x=None, legend='promp', color=None):
         mean = np.dot(self.Phi, self.meanW)
-        plt.plot(self.x if x is None else x, np.dot(self.Phi, self.meanW), color=color, label=legend)
+        x = self.x if x is None else x
+        plt.plot(x, np.dot(self.Phi, self.meanW), color=color, label=legend)
         std = 2*np.sqrt(np.diag(np.dot(self.Phi, np.dot(self.sigmaW, self.Phi.T))))
-        plt.fill_between(self.x if x is None else x, mean - std, mean + std, color=color, alpha=0.2)
+        plt.fill_between(x, mean - std, mean + std, color=color, alpha=0.2)
+        for viapoint_id, viapoint in enumerate(self.viapoints):
+            x_index = x[int(round((len(x)-1)*viapoint['t'], 0))]
+            plt.plot(x_index, viapoint['obsy'], marker="o", markersize=10, label="Via {} {}".format(viapoint_id, legend), color=color)

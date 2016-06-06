@@ -68,21 +68,36 @@ class ProMP(object):
             obsys = obsys.joint_state
         elif not isinstance(obsys, JointState):
             raise TypeError("ros.ProMP.add_viapoint only accepts RS or JS, got {}".format(type(obsys)))
-        self.promp.add_viapoint(t, map(float, obsys.position), sigmay)
+        try:
+            positions = [obsys.position[obsys.name.index(joint)] for joint in self.joint_names]  # Make sure joints are in right order
+        except KeyError as e:
+            raise KeyError("Joint {} provided as viapoint is unknown to the demonstrations".format(e))
+        else:
+            self.promp.add_viapoint(t, map(float, positions), sigmay)
 
     def set_goal(self, obsy, sigmay=1e-6):
         if isinstance(obsy, RobotState):
             obsy = obsy.joint_state
         elif not isinstance(obsy, JointState):
             raise TypeError("ros.ProMP.set_goal only accepts RS or JS, got {}".format(type(obsy)))
-        self.promp.set_goal(map(float, obsy.position), sigmay)
+        try:
+            positions = [obsy.position[obsy.name.index(joint)] for joint in self.joint_names]  # Make sure joints are in right order
+        except KeyError as e:
+            raise KeyError("Joint {} provided as goal state is unknown to the demonstrations".format(e))
+        else:
+            self.promp.set_goal(map(float, positions), sigmay)
 
     def set_start(self, obsy, sigmay=1e-6):
         if isinstance(obsy, RobotState):
             obsy = obsy.joint_state
         elif not isinstance(obsy, JointState):
             raise TypeError("ros.ProMP.set_start only accepts RS or JS, got {}".format(type(obsy)))
-        self.promp.set_start(map(float, obsy.position), sigmay)
+        try:
+            positions = [obsy.position[obsy.name.index(joint)] for joint in self.joint_names]  # Make sure joints are in right order
+        except KeyError as e:
+            raise KeyError("Joint {} provided as start state is unknown to the demonstrations".format(e))
+        else:
+            self.promp.set_start(map(float, positions), sigmay)
 
     def generate_trajectory(self, duration=-1):
         """

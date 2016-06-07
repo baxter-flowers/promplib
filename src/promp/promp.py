@@ -85,21 +85,25 @@ class NDProMP(object):
         for joint_demo in range(self.num_joints):
             self.promps[joint_demo].set_start(obsy[joint_demo], sigmay)
 
-    def generate_trajectory(self):
+    def generate_trajectory(self, randomness=1e-10):
         trajectory = []
         for joint_demo in range(self.num_joints):
-            trajectory.append(self.promps[joint_demo].generate_trajectory())
+            trajectory.append(self.promps[joint_demo].generate_trajectory(randomness))
         return np.array(trajectory).T[0]
 
-    def plot(self, x=None, joint_names=(), generate_trajectory=False):
-        if generate_trajectory:
-            output = self.generate_trajectory().T
+    def plot(self, x=None, joint_names=(), output_randomess=0.5):
+        """
+        Plot the means and variances of gaussians, requested viapoints as well as an output trajectory (dotted)
+        :param output_randomess: 0. to 1., -1 to disable output plotting
+        """
+        if output_randomess >= 0:
+            output = self.generate_trajectory(output_randomess).T
 
         for promp_idx, promp in enumerate(self.promps):
             color = self.colors[promp_idx % len(self.colors)]
             joint_name = "Joint {}".format(promp_idx+1) if len(joint_names) == 0 else joint_names[promp_idx]
             promp.plot(x, joint_name, color)
-            if generate_trajectory:
+            if output_randomess >= 0:
                 plt.plot(x, output[promp_idx], linestyle='--', label="Out {}".format(joint_name), color=color, lw=2)
 
 
@@ -112,9 +116,10 @@ class ProMP(object):
         self.nrSamples = len(self.x)
         self.nrBasis = nrBasis
         self.sigma = sigma
-        self.nrSamples = len(self.x)
+        self.sigmaSignal = float('inf')  # Noise of signal (float)
         self.C = np.arange(0,nrBasis)/(nrBasis-1.0)
-        self.Phi = np.exp(-.5 * (np.tile(self.x, (nrBasis, 1)).T - self.C) ** 2 / (sigma ** 2))
+        self.Phi = np.exp(-.5 * (np.array(map(lambda x: x - self.C, np.tile(self.x, (self.nrBasis, 1)).T)).T ** 2 / (self.sigma ** 2)))
+        self.Phi /= sum(self.Phi)
 
         self.viapoints = []
         self.W = np.array([])
@@ -128,11 +133,15 @@ class ProMP(object):
         stretched_demo = interpolate(self.x)
         self.Y = np.vstack((self.Y, stretched_demo))
         self.nrTraj = len(self.Y)
-        a = np.linalg.inv(np.dot(self.Phi.T, self.Phi))
-        b = np.dot(self.Phi.T, self.Y.T)
-        self.W = np.dot(a, b)                                                             # weights for each trajectory
-        self.meanW = np.mean(self.W, 1)                                                   # mean of weights
-        self.sigmaW = np.dot((self.W.T-self.meanW).T, (self.W.T-self.meanW))/self.nrTraj  # covariance of weights
+        self.W = np.dot(np.linalg.inv(np.dot(self.Phi, self.Phi.T)), np.dot(self.Phi, self.Y.T)).T  # weights for each trajectory
+        self.meanW = np.mean(self.W, 0)                                                             # mean of weights
+        w1 = np.array(map(lambda x: x - self.meanW.T, self.W))
+        self.sigmaW = np.dot(w1.T, w1)/self.nrTraj                                                  # covariance of weights
+        self.sigmaSignal = np.sum(np.sum((np.dot(self.W, self.Phi) - self.Y) ** 2)) / (self.nrTraj * self.nrSamples)
+
+    @property
+    def noise(self):
+        return self.sigmaSignal
 
     @property
     def num_demos(self):
@@ -166,28 +175,32 @@ class ProMP(object):
     def set_start(self, obsy, sigmay=1e-6):
         self.add_viapoint(0., obsy, sigmay)
 
-    def generate_trajectory(self):
+    def generate_trajectory(self, randomness=1e-10):
+        """
+        Outputs a trajectory
+        :param randomness: float between 0. (output will be the mean of gaussians) and 1. (fully randomized inside the variance)
+        :return: a 1-D vector of the generated points
+        """
         newMu = self.meanW
         newSigma = self.sigmaW
 
         for viapoint in self.viapoints:
-            PhiT = np.exp(-.5 * (np.tile(viapoint["t"], (self.nrBasis, 1)).T - self.C) ** 2 / (self.sigma ** 2))
+            PhiT = np.exp(-.5 * (np.array(map(lambda x: x - self.C, np.tile(viapoint['t'], (11, 1)).T)).T ** 2 / (self.sigma ** 2)))
             PhiT = PhiT / sum(PhiT)  # basis functions at observed time points
 
             # Conditioning
-            aux = viapoint["sigmay"] + np.dot(np.dot(PhiT, newSigma), PhiT.T)
+            aux = viapoint['sigmay'] + np.dot(np.dot(PhiT.T, newSigma), PhiT)
+            newMu += np.dot(np.dot(newSigma, PhiT) * 1 / aux, (viapoint['obsy'] - np.dot(PhiT.T, newMu)))  # new weight mean conditioned on observations
+            newSigma -= np.dot(np.dot(newSigma, PhiT) * 1 / aux, np.dot(PhiT.T, newSigma))
 
-            newMu = newMu + np.dot(np.dot(newSigma, PhiT.T) * 1 / aux, (viapoint["obsy"] - np.dot(PhiT, newMu.T)))  # new weight mean conditioned on observations
-            newSigma = newSigma - np.dot(np.dot(newSigma, PhiT.T) * 1 / aux, np.dot(PhiT, newSigma))
-
-        sampW = np.random.multivariate_normal(newMu, newSigma, 1).T
-        return np.dot(self.Phi, sampW)
+        sampW = np.random.multivariate_normal(newMu, randomness*newSigma, 1).T
+        return np.dot(self.Phi.T, sampW)
 
     def plot(self, x=None, legend='promp', color=None):
-        mean = np.dot(self.Phi, self.meanW)
+        mean = np.dot(self.Phi.T, self.meanW)
         x = self.x if x is None else x
-        plt.plot(x, np.dot(self.Phi, self.meanW), color=color, label=legend)
-        std = 2*np.sqrt(np.diag(np.dot(self.Phi, np.dot(self.sigmaW, self.Phi.T))))
+        plt.plot(x, mean, color=color, label=legend)
+        std = 2*np.sqrt(np.diag(np.dot(self.Phi.T, np.dot(self.sigmaW, self.Phi))))
         plt.fill_between(x, mean - std, mean + std, color=color, alpha=0.2)
         for viapoint_id, viapoint in enumerate(self.viapoints):
             x_index = x[int(round((len(x)-1)*viapoint['t'], 0))]

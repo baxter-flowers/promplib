@@ -99,13 +99,13 @@ class ProMP(object):
         else:
             self.promp.set_start(map(float, positions), sigmay)
 
-    def generate_trajectory(self, duration=-1):
+    def generate_trajectory(self, randomness=1e-10, duration=-1):
         """
         Generate a new trajectory from the given demonstrations and parameters
         :param duration: Desired duration, auto if duration < 0
         :return: the generated RobotTrajectory message
         """
-        trajectory_array = self.promp.generate_trajectory()
+        trajectory_array = self.promp.generate_trajectory(randomness)
         rt = RobotTrajectory()
         rt.joint_trajectory.joint_names = self.joint_names
         duration = float(self.mean_duration) if duration < 0 else duration
@@ -115,7 +115,11 @@ class ProMP(object):
             rt.joint_trajectory.points.append(jtp)
         return rt
 
-    def plot(self, generate_trajectory=False):
-        self.promp.plot(linspace(0, self.mean_duration, self.num_points), self.joint_names, generate_trajectory)
+    def plot(self, output_randomess=0.5):
+        """
+        Plot the means and variances of gaussians, requested viapoints as well as an output trajectory (dotted)
+        :param output_randomess: 0. to 1., -1 to disable output plotting
+        """
+        self.promp.plot(linspace(0, self.mean_duration, self.num_points), self.joint_names, output_randomess)
         legend(loc="upper left")
         show()

@@ -5,6 +5,28 @@ from numpy import mean, array, linspace
 from rospy import Duration
 from matplotlib.pyplot import show, legend
 from .promp import NDProMP
+from .ik import IK as _IK
+
+
+class IK(object):
+    def __init__(self, arm, k=2):
+        self._ik = _IK(arm, k)
+
+    def get(self, x_des, seed, bounds=()):
+        """
+        Get the IK by minimization
+        :param x_des: desired task space pose [[x, y, z], [x, y, z, w]]
+        :param seed: ['s0', 's1', 'e0', 'e1', 'w0', 'w1', 'w2']
+        :param bounds: promp mean-std, mean+std
+        :return: (bool, joints)
+        """
+        if isinstance(seed, RobotState):
+            seed = seed.joint_state
+        elif not isinstance(seed, JointState):
+            raise TypeError('ros.IK.get only accepts RS or JS, got {}'.format(type(seed)))
+
+        result = self._ik.get(x_des, [seed.position[seed.name.index(joint)] for joint in self._ik.joints], bounds)
+        return result[0], JointState(name=self._ik.joints, position=list(result[1]))
 
 
 class ProMP(object):

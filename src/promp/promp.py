@@ -190,8 +190,8 @@ class ProMP(object):
 
             # Conditioning
             aux = viapoint['sigmay'] + np.dot(np.dot(PhiT.T, newSigma), PhiT)
-            newMu += np.dot(np.dot(newSigma, PhiT) * 1 / aux, (viapoint['obsy'] - np.dot(PhiT.T, newMu)))  # new weight mean conditioned on observations
-            newSigma -= np.dot(np.dot(newSigma, PhiT) * 1 / aux, np.dot(PhiT.T, newSigma))
+            newMu = newMu + np.dot(np.dot(newSigma, PhiT) * 1 / aux, (viapoint['obsy'] - np.dot(PhiT.T, newMu)))  # new weight mean conditioned on observations
+            newSigma = newSigma - np.dot(np.dot(newSigma, PhiT) * 1 / aux, np.dot(PhiT.T, newSigma))
 
         sampW = np.random.multivariate_normal(newMu, randomness*newSigma, 1).T
         return np.dot(self.Phi.T, sampW)

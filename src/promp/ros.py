@@ -1,9 +1,11 @@
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from sensor_msgs.msg import JointState
 from moveit_msgs.msg import RobotTrajectory, RobotState
-from numpy import mean, array, linspace
+from nav_msgs.msg import Path
+from numpy import mean, linspace
 from rospy import Duration
 from matplotlib.pyplot import show, legend
+from transformations import pose_to_list, list_to_raw_list, raw_list_to_list
 from .promp import NDProMP
 from .ik import IK as _IK
 
@@ -12,21 +14,46 @@ class IK(object):
     def __init__(self, arm, k=2):
         self._ik = _IK(arm, k)
 
-    def get(self, x_des, seed, bounds=()):
+    def get(self, x_des, seed=None, bounds=()):
         """
         Get the IK by minimization
         :param x_des: desired task space pose [[x, y, z], [x, y, z, w]]
-        :param seed: ['s0', 's1', 'e0', 'e1', 'w0', 'w1', 'w2']
+        :param seed: RobotState message
         :param bounds: promp mean-std, mean+std
         :return: (bool, joints)
         """
         if isinstance(seed, RobotState):
             seed = seed.joint_state
-        elif not isinstance(seed, JointState):
+        elif not isinstance(seed, JointState) and seed is not None:
             raise TypeError('ros.IK.get only accepts RS or JS, got {}'.format(type(seed)))
 
-        result = self._ik.get(x_des, [seed.position[seed.name.index(joint)] for joint in self._ik.joints], bounds)
+        seed = [seed.position[seed.name.index(joint)] for joint in self._ik.joints] if seed is not None else ()
+        result = self._ik.get(x_des, seed, bounds)
         return result[0], JointState(name=self._ik.joints, position=list(result[1]))
+
+    def get_multiple(self, x_des_list, seed=None, bounds=()):
+        """
+        Get multiple IKs whose points follow each other
+        :param x_des_list: The list of end effector
+        :param seed: RobotState message
+        :param bounds:
+        :return: [(bool, joints), (bool, joints), ...]
+        """
+        if not isinstance(x_des_list, list) and not isinstance(x_des_list, tuple):
+            raise TypeError('ros.IK.get_multiple only accepts lists, got {}'.format(type(x_des_list)))
+
+        def get_seed(output):
+            # Find the last valid seed
+            for point in range(-1, -len(output)-1, -1):
+                if output[point][0]:
+                    return output[point][1]
+            return seed
+
+        output = []
+        for x_des in x_des_list:
+            selected_seed = get_seed(output)
+            output.append(self.get(x_des, selected_seed, bounds))
+        return output
 
 
 class ProMP(object):

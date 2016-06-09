@@ -172,3 +172,105 @@ class ProMP(object):
         self.promp.plot(linspace(0, self.mean_duration, self.num_points), self.joint_names, output_randomess)
         legend(loc="upper left")
         show()
+
+
+class TaskProMP(object):
+    def __init__(self, side):
+        self._num_promps = 7  # 3 position + 4 rotation
+        self._durations = []
+        self.promp = NDProMP(self._num_promps)
+        self._ik = IK(side)
+        self.joint_names = []
+
+    def add_demonstration(self, demonstration, js_demo):
+        """
+        Add a new task-space demonstration and update the model
+        :param demonstration: Path object
+        :param js_demo: Joint space demo for duration TODO replace Path by something else including duration?
+        :return:
+        """
+        if not isinstance(demonstration, Path):
+            raise TypeError("ros.TaskProMP.add_demonstration only accepts Path, got {}".format(type(demonstration)))
+
+        if isinstance(js_demo, RobotTrajectory):
+            js_demo = js_demo.joint_trajectory
+        elif not isinstance(js_demo, JointTrajectory):
+            raise TypeError("ros.ProMP.add_demo only accepts RT or JT, got {}".format(type(js_demo)))
+
+        self._durations.append(
+            js_demo.points[-1].time_from_start.to_sec() - js_demo.points[0].time_from_start.to_sec())
+        self.joint_names = js_demo.joint_names
+        demo_array = [list_to_raw_list(pose_to_list(pose)) for pose in demonstration.poses]
+        self.promp.add_demonstration(demo_array)
+
+    @property
+    def num_demos(self):
+        return self.promp.num_demos
+
+    @property
+    def num_points(self):
+        return self.promp.num_points
+
+    @property
+    def num_viapoints(self):
+        return self.promp.num_viapoints
+
+    @property
+    def mean_duration(self):
+        return float(mean(self._durations))
+
+    def clear_viapoints(self):
+        self.promp.clear_viapoints()
+
+    @staticmethod
+    def _is_transformation(obj):
+        return (isinstance(obj, list) or isinstance(obj, tuple)) and (isinstance(obj[0], list) or isinstance(obj[0], tuple))
+
+    def add_viapoint(self, t, obsys, sigmay=1e-6):
+        """
+        Add a viapoint i.e. an observation at a specific time
+        :param t: Time of observation
+        :param obsys: [[x, y, z], [x, y, z, w]] observed at the time
+        :param sigmay:
+        :return:
+        """
+        if not self._is_transformation(obsys):
+            raise TypeError("ros.TaskProMP.add_viapoint only accepts [[x, y, z], [x, y, z, w]] viapoints")
+        self.promp.add_viapoint(t, list_to_raw_list(obsys), sigmay)
+
+    def set_goal(self, obsy, sigmay=1e-6):
+        if not self._is_transformation(obsy):
+            raise TypeError("ros.TaskProMP.set_goal only accepts [[x, y, z], [x, y, z, w]] goals")
+        self.promp.add_viapoint(list_to_raw_list(obsy), sigmay)
+
+    def set_start(self, obsy, sigmay=1e-6):
+        if not self._is_transformation(obsy):
+            raise TypeError("ros.TaskProMP.set_start only accepts [[x, y, z], [x, y, z, w]] start states")
+        self.promp.add_viapoint(list_to_raw_list(obsy), sigmay)
+
+    def generate_path(self, randomness=1e-10):
+        raise NotImplementedError()
+
+    def generate_trajectory(self, randomness=1e-10, seed=None, duration=-1):
+        trajectory_array = self.promp.generate_trajectory(randomness)
+        rt = RobotTrajectory()
+        rt.joint_trajectory.joint_names = self.joint_names
+        duration = float(self.mean_duration) if duration < 0 else duration
+        ik = self._ik.get_multiple(list(trajectory_array), seed)
+        for point_idx, point in enumerate(ik):
+            success, joints = point[0], point[1]
+            if success:
+                time = point_idx * duration / float(self.num_points)
+                positions = [joints.position[joints.name.index(joint)] for joint in self.joint_names]
+                jtp = JointTrajectoryPoint(positions=positions, time_from_start=Duration(time))
+                rt.joint_trajectory.points.append(jtp)
+        return rt
+
+    def plot(self, output_randomess=0.5):
+        """
+        Plot the means and variances of gaussians, requested viapoints as well as an output trajectory (dotted)
+        :param output_randomess: 0. to 1., -1 to disable output plotting
+        """
+        self.promp.plot(linspace(0, self.mean_duration, self.num_points), ['x', 'y', 'z', 'qx', 'qy', 'qz', 'qw'], output_randomess)
+        legend(loc="upper left")
+        show()

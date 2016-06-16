@@ -53,6 +53,10 @@ class NDProMP(object):
     def num_viapoints(self):
         return self.promps[0].num_viapoints
 
+    @property
+    def goal_bounds(self):
+        return [joint.goal_bounds for joint in self.promps]
+
     def clear_viapoints(self):
         for promp in self.promps:
             promp.clear_viapoints()
@@ -154,6 +158,16 @@ class ProMP(object):
     @property
     def num_viapoints(self):
         return len(self.viapoints)
+
+    @property
+    def goal_bounds(self):
+        """
+        Joint boundaries of the last point
+        :return: (lower boundary, upper boundary)
+        """
+        mean = np.dot(self.Phi.T, self.meanW)
+        std = 2 * np.sqrt(np.diag(np.dot(self.Phi.T, np.dot(self.sigmaW, self.Phi))))
+        return (mean - std)[-1], (mean + std)[-1]
 
     def clear_viapoints(self):
         del self.viapoints[:]

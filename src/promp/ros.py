@@ -129,6 +129,10 @@ class ProMP(object):
     def mean_duration(self):
         return float(mean(self._durations))
 
+    @property
+    def goal_bounds(self):
+        return dict(zip(self.joint_names, self.promp.goal_bounds))
+
     def clear_viapoints(self):
         self.promp.clear_viapoints()
 

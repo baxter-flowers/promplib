@@ -8,11 +8,16 @@ from matplotlib.pyplot import show, legend
 from transformations import pose_to_list, list_to_raw_list, raw_list_to_list
 from .promp import NDProMP
 from .ik import IK as _IK
+from .ik import FK as _FK
 
 
 class IK(object):
     def __init__(self, arm, k=2):
         self._ik = _IK(arm, k)
+
+    @property
+    def joints(self):
+        return self._ik.joints
 
     def get(self, x_des, seed=None, bounds=()):
         """
@@ -54,6 +59,28 @@ class IK(object):
             selected_seed = get_seed(output)
             output.append(self.get(x_des, selected_seed, bounds))
         return output
+
+
+class FK(object):
+    def __init__(self, arm):
+        self._fk = _FK(arm)
+
+    @property
+    def joints(self):
+        return self._fk.joints
+
+    def get(self, state):
+        """
+        Get the FK
+        :param state: RobotState message to get the forward kinematics for
+        :return: [[x, y, z], [x, y, z, w]]
+        """
+        if isinstance(state, RobotState):
+            state = state.joint_state
+        elif not isinstance(state, JointState):
+            raise TypeError('ros.FK.get only accepts RS or JS, got {}'.format(type(state)))
+
+        return self._fk.get([state.position[state.name.index(joint)] for joint in self.joints])
 
 
 class ProMP(object):

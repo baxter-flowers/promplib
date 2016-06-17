@@ -39,8 +39,8 @@ class IK(object):
             bounds = [(-pi, pi) for j in self._joints]
         if len(seed) == 0:
             seed = [0. for j in self._joints]
-        args = [array(x_des[0] + x_des[1])] if len(x_des) == 2 else [x_des]
-        result = minimize(self.cost_ik, seed, args=args, bounds=bounds, method='L-BFGS-B')
+        args = [element for component in x_des for element in component] if len(x_des) == 2 else x_des
+        result = minimize(self.cost_ik, seed, args=[args], bounds=bounds, method='L-BFGS-B')
         return result.success, result.x
 
 

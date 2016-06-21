@@ -112,31 +112,32 @@ class InteractiveProMP(object):
         """
         self.clear_goal()  # TODO this erases also non-goal viapoints, replace only the goal?
 
-        # Browse all proMPs, sort them be increasing distance and focus on the first
-        promps_for_x_des = [(promp_index, self._get_distance_and_goal(promp, x_des)) for promp_index, promp in enumerate(self.promps)]
-        promps_for_x_des = sorted(promps_for_x_des, key=lambda x: x[1][0])  # Sort by increasing distance
+        if self.num_primitives > 0:
+            # Browse all proMPs, sort them be increasing distance and focus on the first
+            promps_for_x_des = [(promp_index, self._get_distance_and_goal(promp, x_des)) for promp_index, promp in enumerate(self.promps)]
+            promps_for_x_des = sorted(promps_for_x_des, key=lambda x: x[1][0])  # Sort by increasing distance
 
-        # We got the closest proMP, now decide what to do regarding its distance to the goal
-        promp_index, distance, goal_js = promps_for_x_des[0][0], promps_for_x_des[0][1][0], promps_for_x_des[0][1][1]
-        if distance < self.epsilon_ok:
-            #promp.clear_viapoints()  # TODO this erases also non-goal viapoints, replace only the goal?
-            self.promps[promp_index].set_goal(goal_js)
-            self.promp_read_index = promp_index
-            return True
-        # Now the user wants to reach a goal that requires a new demo. Two possible behaviours:
-        # EITHER we rely on the user by assuming that the next demo will be for primitive #promp_index (is it a useful info?) [1]
-        # OR we don't rely on him and recompute in any case which promp will be targeted when the new demo is given [2]
-        # [1] seems risky since the user might demonstrate a slightly/completely different goal that what he requested
-        # and that could make the difference for targeting another primitive in the end
-        # To activate [1], remove the if True in add_demonstration()
-        elif distance < self.epsilon_new_demo:
-            self.promp_write_index = promp_index
-            self.promp_read_index = -1  # A new demo has been requested
-            return False
-        else:
-            self.promp_write_index = -1
-            self.promp_read_index = -1  # A new promp has been requested
-            return False
+            # We got the closest proMP, now decide what to do regarding its distance to the goal
+            promp_index, distance, goal_js = promps_for_x_des[0][0], promps_for_x_des[0][1][0], promps_for_x_des[0][1][1]
+            if distance < self.epsilon_ok:
+                #promp.clear_viapoints()  # TODO this erases also non-goal viapoints, replace only the goal?
+                self.promps[promp_index].set_goal(goal_js)
+                self.promp_read_index = promp_index
+                return True
+            # Now the user wants to reach a goal that requires a new demo. Two possible behaviours:
+            # EITHER we rely on the user by assuming that the next demo will be for primitive #promp_index (is it a useful info?) [1]
+            # OR we don't rely on him and recompute in any case which promp will be targeted when the new demo is given [2]
+            # [1] seems risky since the user might demonstrate a slightly/completely different goal that what he requested
+            # and that could make the difference for targeting another primitive in the end
+            # To activate [1], remove the if True in add_demonstration()
+            elif distance < self.epsilon_new_demo:
+                self.promp_write_index = promp_index
+                self.promp_read_index = -1  # A new demo has been requested
+                return False
+            else:
+                self.promp_write_index = -1
+                self.promp_read_index = -1  # A new promp has been requested
+                return False
 
     def _get_distance_and_goal(self, promp, x_des):
         """

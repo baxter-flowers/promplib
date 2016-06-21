@@ -79,9 +79,10 @@ class InteractiveProMP(object):
         :param demonstration: RobotTrajectory or JointTrajectory object
         :return:
         """
-        if self.promp_write_index == -2:
-            # Spontaneous demonstration
-            # If any promp has a distance < epsilon_new_demo, take the closest and enrich it
+        #if self.promp_write_index == -2:
+        #    # Spontaneous demonstration
+        #     # If any promp has a distance < epsilon_new_demo, take the closest and enrich it
+        if True:  # Behaviour [2] always determines which primitive must be targeted, see comment in set_goal()
             min_distance = self.epsilon_new_demo
             self.promp_write_index = -1  # If none has such distance, create a new one
             for promp_index, promp in enumerate(self.promps):
@@ -105,6 +106,7 @@ class InteractiveProMP(object):
 
     def set_goal(self, x_des):
         """
+        Set a new joint-space goal, and determine which primitive will be used
         :param x_des: desired joint-space goal
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
@@ -121,6 +123,12 @@ class InteractiveProMP(object):
             self.promps[promp_index].set_goal(goal_js)
             self.promp_read_index = promp_index
             return True
+        # Now the user wants to reach a goal that requires a new demo. Two possible behaviours:
+        # EITHER we rely on the user by assuming that the next demo will be for primitive #promp_index (is it a useful info?) [1]
+        # OR we don't rely on him and recompute in any case which promp will be targeted when the new demo is given [2]
+        # [1] seems risky since the user might demonstrate a slightly/completely different goal that what he requested
+        # and that could make the difference for targeting another primitive in the end
+        # To activate [1], remove the if True in add_demonstration()
         elif distance < self.epsilon_new_demo:
             self.promp_write_index = promp_index
             self.promp_read_index = -1  # A new demo has been requested

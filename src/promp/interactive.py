@@ -42,11 +42,11 @@ class InteractiveProMP(object):
     @property
     def status_writing(self):
         if self.promp_write_index == -1:
-            return "new demonstration requested for a new promp"
+            return "new demonstration requested for a new Pro MP"
         elif self.promp_write_index == -2:
             return "spontaneous demo possible but not required"
         elif 0 <= self.promp_write_index < self.num_primitives:
-            return "new demonstration requested for promp {}".format(self.promp_write_index)
+            return "new demonstration requested for Pro MP {}".format(self.promp_write_index)
         return "unknown"
 
     @property
@@ -54,7 +54,7 @@ class InteractiveProMP(object):
         if self.promp_read_index == -1:
             return "no goal set (or invalid)"
         elif 0 <= self.promp_read_index < self.num_primitives:
-            return "goal is ready to be generated with promp {}".format(self.promp_read_index)
+            return "goal is ready to be generated with Pro MP {}".format(self.promp_read_index)
         return "unknown"
 
     def clear_goal(self):

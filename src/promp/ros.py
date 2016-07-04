@@ -2,9 +2,10 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from sensor_msgs.msg import JointState
 from moveit_msgs.msg import RobotTrajectory, RobotState
 from nav_msgs.msg import Path
-from numpy import mean, linspace
+from numpy import mean, linspace, array
 from rospy import Duration
 from matplotlib.pyplot import show, legend
+from scipy.interpolate import interp1d
 from transformations import pose_to_list, list_to_raw_list, raw_list_to_list
 from .promp import NDProMP
 from .ik import IK as _IK
@@ -12,8 +13,14 @@ from .ik import FK as _FK
 
 
 class IK(object):
-    def __init__(self, arm, k=2):
+    def __init__(self, arm, k=2, maximum_velocity=5.):
+        """
+        :param arm: 'left', or 'right'
+        :param k: Coefficient of importance of orientation with respect to position
+        :param maximum_velocity: Limit in rad/s for each individual joint (used to prevent IK jumps when computing a trajectory)
+        """
         self._ik = _IK(arm, k)
+        self.maximum_velocity = maximum_velocity
 
     @property
     def joints(self):
@@ -36,29 +43,51 @@ class IK(object):
         result = self._ik.get(x_des, seed, bounds)
         return result[0], JointState(name=self._ik.joints, position=list(result[1]))
 
-    def get_multiple(self, x_des_list, seed=None, bounds=()):
+    def get_multiple(self, x_des_list, duration, seed=None, bounds_func=None):
         """
-        Get multiple IKs whose points follow each other
+        Get multiple IKs whose points follow each other and construct a trajectory
+        # TODO to be moved in lower layer?
         :param x_des_list: The list of end effector
-        :param seed: RobotState message
-        :param bounds:
-        :return: [(bool, joints), (bool, joints), ...]
+        :param seed: JointState message
+        :param bounds_func: callables bounds_func[0|1][joint](t) for each joint for each time, that return the selected lower or upper boundary
+        :param duration: duration of the whole trajectory in seconds to be able to prevent jumps
+        :return: JointTrajectory
         """
         if not isinstance(x_des_list, list) and not isinstance(x_des_list, tuple):
             raise TypeError('ros.IK.get_multiple only accepts lists, got {}'.format(type(x_des_list)))
+        if not callable(bounds_func):
+            bounds_func = lambda t: [(-3.1415, 3.1415) for joint in self._ik.joints]
 
-        def get_seed(output):
-            # Find the last valid seed
-            for point in range(-1, -len(output)-1, -1):
-                if output[point][0]:
-                    return output[point][1]
-            return seed
+        def get_last_state(trajectory):
+            # Find the last valid state
+            return JointState(position=trajectory.points[-1].positions,
+                              name=trajectory.joint_names) if len(trajectory.points) > 0 else None
 
-        output = []
-        for x_des in x_des_list:
-            selected_seed = get_seed(output)
-            output.append(self.get(x_des, selected_seed, bounds))
-        return output
+        trajectory = JointTrajectory(joint_names=self._ik.joints)
+        for point_idx, x_des in enumerate(x_des_list):
+            last_state = get_last_state(trajectory)
+            selected_seed = seed if last_state is None else last_state
+            time = point_idx * duration / float(len(x_des_list))
+
+            # Find the velocity bounds to prevent jumps
+            if last_state is None:
+                local_bounds = bounds_func(point_idx / float(len(x_des_list)))
+            else:
+                last_t = trajectory.points[-1].time_from_start.to_sec()
+                delta_rad = (time - last_t) * self.maximum_velocity
+                local_bounds = []
+                for joint_idx, joint in enumerate(self._ik.joints):
+                    velocity_bounds = (trajectory.points[-1].positions[joint_idx] - delta_rad,
+                                       trajectory.points[-1].positions[joint_idx] + delta_rad)
+                    # Local bounds are the intersection of initial requested bounds + velocity bounds
+                    requested_bounds = bounds_func(point_idx/float(len(x_des_list)))
+                    local_bounds.append((max(requested_bounds[joint_idx][0], velocity_bounds[0]),
+                                         min(requested_bounds[joint_idx][1], velocity_bounds[1])))
+
+            valid, joints = self.get(x_des, selected_seed, local_bounds)
+            jtp = JointTrajectoryPoint(positions=joints.position, time_from_start=Duration(time))
+            trajectory.points.append(jtp)
+        return trajectory
 
 
 class FK(object):
@@ -132,6 +161,9 @@ class ProMP(object):
     @property
     def goal_bounds(self):
         return dict(zip(self.joint_names, self.promp.goal_bounds))
+
+    def get_bounds(self, t):
+        return dict(zip(self.joint_names, self.promp.get_bounds(t)))
 
     def clear_viapoints(self):
         self.promp.clear_viapoints()
@@ -287,15 +319,11 @@ class TaskProMP(object):
         rt = RobotTrajectory()
         rt.joint_trajectory.joint_names = self.joint_names
         duration = float(self.mean_duration) if duration < 0 else duration
-        ik = self._ik.get_multiple(list(trajectory_array), seed)
-        for point_idx, point in enumerate(ik):
-            success, joints = point[0], point[1]
-            if success:
-                time = point_idx * duration / float(self.num_points)
-                positions = [joints.position[joints.name.index(joint)] for joint in self.joint_names]
-                jtp = JointTrajectoryPoint(positions=positions, time_from_start=Duration(time))
-                rt.joint_trajectory.points.append(jtp)
-        return rt
+        trajectory_bounds = array([self.promp.get_bounds(point/len(trajectory_array)) for point in range(len(trajectory_array))]).T
+        times = linspace(0, 1, self.promp.num_points)
+        lower_bounds_funs = [interp1d(times, trajectory_bounds[0], kind='quadratic') for joint in range(len(self._ik.joints))]
+        upper_bounds_funs = [interp1d(times, trajectory_bounds[1], kind='quadratic') for joint in range(len(self._ik.joints))]
+        return self._ik.get_multiple(list(trajectory_array), duration, seed, (lower_bounds_funs, upper_bounds_funs))
 
     def plot(self, output_randomess=0.5):
         """

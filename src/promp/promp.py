@@ -57,6 +57,14 @@ class NDProMP(object):
     def goal_bounds(self):
         return [joint.goal_bounds for joint in self.promps]
 
+    def get_bounds(self, t):
+        """
+        Return the bounds of all joints at time t
+        :param t: 0 <= t <= 1
+        :return: [(lower boundary joints 0, upper boundary joints 0), (lower boundary joint 1), upper)...]
+        """
+        return [joint.get_bounds(t) for joint in self.promps]
+
     def clear_viapoints(self):
         for promp in self.promps:
             promp.clear_viapoints()
@@ -165,9 +173,20 @@ class ProMP(object):
         Joint boundaries of the last point
         :return: (lower boundary, upper boundary)
         """
+        return self._get_bounds(-1)
+
+    def get_bounds(self, t):
+        """
+        Return the bounds at time t
+        :param t: 0 <= t <= 1
+        :return: (lower boundary, upper boundary)
+        """
+        return self._get_bounds(int(self.num_points*t))
+
+    def _get_bounds(self, t_index):
         mean = np.dot(self.Phi.T, self.meanW)
         std = 2 * np.sqrt(np.diag(np.dot(self.Phi.T, np.dot(self.sigmaW, self.Phi))))
-        return (mean - std)[-1], (mean + std)[-1]
+        return (mean - std)[t_index], (mean + std)[-1]
 
     def clear_viapoints(self):
         del self.viapoints[:]

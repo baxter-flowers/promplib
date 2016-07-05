@@ -6,7 +6,7 @@ class NDProMP(object):
     """
     n-dimensional ProMP
     """
-    def __init__(self, num_joints, nrBasis=11, sigma=0.05, num_samples=500):
+    def __init__(self, num_joints, nrBasis=11, sigma=0.05, num_samples=100):
         """
 
         :param num_joints: Number of underlying ProMPs
@@ -123,7 +123,7 @@ class ProMP(object):
     """
     Uni-dimensional probabilistic MP
     """
-    def __init__(self, nrBasis=11, sigma=0.05, num_samples=500):
+    def __init__(self, nrBasis=11, sigma=0.05, num_samples=100):
         self.x = np.linspace(0, 1, num_samples)
         self.nrSamples = len(self.x)
         self.nrBasis = nrBasis

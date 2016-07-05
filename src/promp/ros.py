@@ -113,10 +113,10 @@ class FK(object):
 
 
 class ProMP(object):
-    def __init__(self, num_joints=7):
+    def __init__(self, num_joints=7, num_samples=100):
         self._num_joints = num_joints
         self._durations = []
-        self.promp = NDProMP(num_joints)
+        self.promp = NDProMP(num_joints, num_samples=num_samples)
         self.joint_names = []
 
     @property

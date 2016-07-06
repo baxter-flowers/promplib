@@ -309,12 +309,12 @@ class TaskProMP(object):
     def set_goal(self, obsy, sigmay=1e-6):
         if not self._is_transformation(obsy):
             raise TypeError("ros.TaskProMP.set_goal only accepts [[x, y, z], [x, y, z, w]] goals")
-        self.promp.add_viapoint(list_to_raw_list(obsy), sigmay)
+        self.promp.set_goal(list_to_raw_list(obsy), sigmay)
 
     def set_start(self, obsy, sigmay=1e-6):
         if not self._is_transformation(obsy):
             raise TypeError("ros.TaskProMP.set_start only accepts [[x, y, z], [x, y, z, w]] start states")
-        self.promp.add_viapoint(list_to_raw_list(obsy), sigmay)
+        self.promp.set_start(list_to_raw_list(obsy), sigmay)
 
     def generate_path(self, randomness=1e-10):
         raise NotImplementedError()

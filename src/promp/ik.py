@@ -32,7 +32,7 @@ class IK(object):
         Get the IK by minimization
         :param x_des: desired task space pose [[x, y, z], [x, y, z, w]] or flattened [x, y, z, x, y, z, w]
         :param seed: ['s0', 's1', 'e0', 'e1', 'w0', 'w1', 'w2']
-        :param bounds: promp mean-std, mean+std
+        :param bounds: [(min, max), (min, max), (min, max), ... for each joint]
         :return: (bool, joints)
         """
         if len(bounds) != len(self._joints):

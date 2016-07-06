@@ -31,7 +31,7 @@ class IK(object):
         Get the IK by minimization
         :param x_des: desired task space pose [[x, y, z], [x, y, z, w]]
         :param seed: RobotState message
-        :param bounds: promp mean-std, mean+std
+        :param bounds:[(min, max), (min, max), (min, max), ... for each joint]
         :return: (bool, joints)
         """
         if isinstance(seed, RobotState):
@@ -43,35 +43,40 @@ class IK(object):
         result = self._ik.get(x_des, seed, bounds)
         return result[0], JointState(name=self._ik.joints, position=list(result[1]))
 
-    def get_multiple(self, x_des_list, duration, seed=None, bounds_func=None):
+    def get_multiple(self, x_des_list, duration, seed=None, bounds_funcs=None):
         """
         Get multiple IKs whose points follow each other and construct a trajectory
         # TODO to be moved in lower layer?
         :param x_des_list: The list of end effector
         :param seed: JointState message
-        :param bounds_func: callables bounds_func[0|1][joint](t) for each joint for each time, that return the selected lower or upper boundary
+        :param bounds_funcs: callables bounds_func[0|1][joint](t) for each joint for each time, that return the selected lower or upper boundary
         :param duration: duration of the whole trajectory in seconds to be able to prevent jumps
         :return: JointTrajectory
         """
         if not isinstance(x_des_list, list) and not isinstance(x_des_list, tuple):
             raise TypeError('ros.IK.get_multiple only accepts lists, got {}'.format(type(x_des_list)))
-        if not callable(bounds_func):
-            bounds_func = lambda t: [(-3.1415, 3.1415) for joint in self._ik.joints]
 
         def get_last_state(trajectory):
             # Find the last valid state
             return JointState(position=trajectory.points[-1].positions,
                               name=trajectory.joint_names) if len(trajectory.points) > 0 else None
 
+
         trajectory = JointTrajectory(joint_names=self._ik.joints)
         for point_idx, x_des in enumerate(x_des_list):
             last_state = get_last_state(trajectory)
             selected_seed = seed if last_state is None else last_state
             time = point_idx * duration / float(len(x_des_list))
+            # bounds_funcs.shape = (2, 7)
+            if bounds_funcs is None:
+                requested_bounds = [(-3.14159268, 3.14159268) for joint in range(len(self._ik.joints))]
+            else:
+                requested_bounds = [(bounds_funcs[0][joint](point_idx / float(len(x_des_list))),
+                                     bounds_funcs[1][joint](point_idx / float(len(x_des_list)))) for joint in range(len(self._ik.joints))]
 
             # Find the velocity bounds to prevent jumps
             if last_state is None:
-                local_bounds = bounds_func(point_idx / float(len(x_des_list)))
+                local_bounds = requested_bounds
             else:
                 last_t = trajectory.points[-1].time_from_start.to_sec()
                 delta_rad = (time - last_t) * self.maximum_velocity
@@ -79,8 +84,8 @@ class IK(object):
                 for joint_idx, joint in enumerate(self._ik.joints):
                     velocity_bounds = (trajectory.points[-1].positions[joint_idx] - delta_rad,
                                        trajectory.points[-1].positions[joint_idx] + delta_rad)
+
                     # Local bounds are the intersection of initial requested bounds + velocity bounds
-                    requested_bounds = bounds_func(point_idx/float(len(x_des_list)))
                     local_bounds.append((max(requested_bounds[joint_idx][0], velocity_bounds[0]),
                                          min(requested_bounds[joint_idx][1], velocity_bounds[1])))
 
@@ -319,11 +324,13 @@ class TaskProMP(object):
         rt = RobotTrajectory()
         rt.joint_trajectory.joint_names = self.joint_names
         duration = float(self.mean_duration) if duration < 0 else duration
-        trajectory_bounds = array([self.promp.get_bounds(point/len(trajectory_array)) for point in range(len(trajectory_array))]).T
-        times = linspace(0, 1, self.promp.num_points)
-        lower_bounds_funs = [interp1d(times, trajectory_bounds[0], kind='quadratic') for joint in range(len(self._ik.joints))]
-        upper_bounds_funs = [interp1d(times, trajectory_bounds[1], kind='quadratic') for joint in range(len(self._ik.joints))]
-        return self._ik.get_multiple(list(trajectory_array), duration, seed, (lower_bounds_funs, upper_bounds_funs))
+        #trajectory_bounds = array([self.promp.get_bounds(point/len(trajectory_array)) for point in range(len(trajectory_array))]).T
+        # trajectory_bounds.shape = (2, 7, 100)
+        #times = linspace(0, 1, self.promp.num_points)
+        #lower_bounds_funs = [interp1d(times, trajectory_bounds[0][joint], kind='quadratic') for joint in range(len(self._ik.joints))]
+        #upper_bounds_funs = [interp1d(times, trajectory_bounds[1][joint], kind='quadratic') for joint in range(len(self._ik.joints))]
+        #return self._ik.get_multiple(list(trajectory_array), duration, seed, (lower_bounds_funs, upper_bounds_funs))
+        return self._ik.get_multiple(list(trajectory_array), duration, seed)
 
     def plot(self, output_randomess=0.5):
         """

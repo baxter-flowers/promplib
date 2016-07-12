@@ -243,10 +243,10 @@ class ProMP(object):
 
 
 class TaskProMP(object):
-    def __init__(self, side):
+    def __init__(self, side, num_samples=100):
         self._num_promps = 7  # 3 position + 4 rotation
         self._durations = []
-        self.promp = NDProMP(self._num_promps)
+        self.promp = NDProMP(self._num_promps, num_samples=num_samples)
         self._ik = IK(side)
         self.joint_names = []
 

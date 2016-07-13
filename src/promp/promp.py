@@ -57,6 +57,10 @@ class NDProMP(object):
     def goal_bounds(self):
         return [joint.goal_bounds for joint in self.promps]
 
+    @property
+    def goal_means(self):
+        return [joint.goal_mean for joint in self.promps]
+
     def get_bounds(self, t):
         """
         Return the bounds of all joints at time t
@@ -64,6 +68,22 @@ class NDProMP(object):
         :return: [(lower boundary joints 0, upper boundary joints 0), (lower boundary joint 1), upper)...]
         """
         return [joint.get_bounds(t) for joint in self.promps]
+
+    def get_means(self, t):
+        """
+        Return the mean of all joints at time t
+        :param t: 0 <= t <= 1
+        :return: [mean joint 1, mean joint 2, ...]
+        """
+        return [joint.get_mean(t) for joint in self.promps]
+
+    def get_stds(self):
+        """
+        Return the standard deviation of all joints
+        :param t: 0 <= t <= 1
+        :return: [std joint 1, std joint 2, ...]
+        """
+        return [joint.get_std() for joint in self.promps]
 
     def clear_viapoints(self):
         for promp in self.promps:
@@ -117,7 +137,6 @@ class NDProMP(object):
             promp.plot(x, joint_name, color)
             if output_randomess >= 0:
                 plt.plot(x, output[promp_idx], linestyle='--', label="Out {}".format(joint_name), color=color, lw=2)
-
 
 class ProMP(object):
     """
@@ -175,6 +194,14 @@ class ProMP(object):
         """
         return self._get_bounds(-1)
 
+    @property
+    def goal_mean(self):
+        """
+        Mean of the last point
+        :return: scalar
+        """
+        return self._get_mean(-1)
+
     def get_bounds(self, t):
         """
         Return the bounds at time t
@@ -183,10 +210,26 @@ class ProMP(object):
         """
         return self._get_bounds(int(self.num_points*t))
 
-    def _get_bounds(self, t_index):
-        mean = np.dot(self.Phi.T, self.meanW)
+    def get_mean(self, t):
+        """
+        Return the mean at time t
+        :param t: 0 <= t <= 1
+        :return: scalar
+        """
+        return self._get_mean(int(self.num_points*t))
+
+    def get_std(self):
         std = 2 * np.sqrt(np.diag(np.dot(self.Phi.T, np.dot(self.sigmaW, self.Phi))))
-        return (mean - std)[t_index], (mean + std)[-1]
+        return std
+
+    def _get_mean(self, t_index):
+        mean = np.dot(self.Phi.T, self.meanW)
+        return mean[t_index]
+
+    def _get_bounds(self, t_index):
+        mean = self._get_mean(t_index)
+        std = self.get_std()
+        return mean - std, mean + std
 
     def clear_viapoints(self):
         del self.viapoints[:]

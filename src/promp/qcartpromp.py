@@ -5,24 +5,31 @@ class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, num_samples=100, context_length=3):
-        self.nrBasis = num_basis
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, num_samples=100, with_orientation=True):
+        self.num_basis = num_basis
         self.nrTraj = num_samples
-        self.context_length = context_length
+        self.with_orientation = with_orientation
+        self.context_length = 7 if with_orientation else 3
 
-        self.mu = np.linspace(0, 1, self.nrBasis)
+        self.mu = np.linspace(0, 1, self.num_basis)
         self.z = np.linspace(0, 1, self.nrTraj).reshape((self.nrTraj, 1))
-        self.sigma = sigma * np.ones(self.nrBasis)
+        self.sigma = sigma * np.ones(self.num_basis)
         self.Gn = self._generate_basis_fx(self.z, self.mu, self.sigma)
 
-        self.my_linRegRidgeFactor = 1e-8 * np.ones((self.nrBasis, self.nrBasis))
+        self.my_linRegRidgeFactor = 1e-8 * np.ones((self.num_basis, self.num_basis))
         self.MPPI = np.dot(np.linalg.inv(np.dot(self.Gn.T, self.Gn) + self.my_linRegRidgeFactor), self.Gn.T)
         self.Y = np.empty((0, num_samples, num_joints), float)  # all demonstrations
         self.x = np.linspace(0, 1, num_samples)
 
-        self.W_full = np.empty((0, self.num_joints * self.nrBasis + self.context_length))
+        self.W_full = np.zeros((0, self.num_joints * self.num_basis + self.context_length))
         self.contexts = []
         self.goal = None
+
+        # number of variables to infer are the weights of the trajectories minus the number of context variables
+        self.nQ = self.num_basis * self.num_joints
+
+        self.mean_W_full = np.zeros(self.context_length)
+        self.cov_W_full = np.zeros((self.context_length, self.context_length))
 
     def _generate_basis_fx(self, z, mu, sigma):
         # print "z", z
@@ -36,31 +43,28 @@ class QCartProMP(object):
         basis_n = basis * (1. / basis_sum)
         return basis_n
 
-    @staticmethod
-    def _gaussian_conditioning(W_full, obs, noise=.01**2):
+    def get_mean_context(self):
+        return self.mean_W_full[-self.context_length:]
+
+    def get_cov_context(self):
+        return self.cov_W_full[-self.context_length:, -self.context_length:]
+
+    def _gaussian_conditioning(self, obs, noise=.01**2):
         # This is an alternative way to condition the ProMP.
         # It is simple compared to the original ProMP because it does not introduce
         # the features. This is possible because we are conditioning the ProMP on
         # the context, which in this case does not have a feature (feature is
         # identity). This function should not be used if you want to implement the
         # "real" ProMP.
-        mean_W_full = np.mean(W_full, axis=0)
-        cov_W_full = np.cov(W_full.T)
-
-        # total dimension of the concatenated weight vector, which here also contains the context.
-        nDim = mean_W_full.shape[0]
-
-        # number of variables to infer are the weights of the trajectories minus the number of context variables
-        q = nDim - obs.shape[0]
 
         model = {}
-        model["Cov11"] = cov_W_full[:q, :q]
-        model["Cov12"] = cov_W_full[:q, q:]
-        model["Cov21"] = cov_W_full[q:, :q]
-        model["Cov22"] = cov_W_full[q:, q:]
+        model["Cov11"] = self.cov_W_full[:self.nQ, :self.nQ]
+        model["Cov12"] = self.cov_W_full[:self.nQ, self.nQ:]
+        model["Cov21"] = self.cov_W_full[self.nQ:, :self.nQ]
+        model["Cov22"] = self.cov_W_full[self.nQ:, self.nQ:]
 
-        mean_wNew = mean_W_full[:q] + np.dot(model["Cov12"], np.dot(
-            np.linalg.inv(model["Cov22"] + noise * np.eye(model["Cov22"].shape[0])), obs - mean_W_full[q:]))
+        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(
+            np.linalg.inv(model["Cov22"] + noise * np.eye(model["Cov22"].shape[0])), obs - self.mean_W_full[self.nQ:]))
         Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(
             np.linalg.inv(model["Cov22"] + noise * np.eye(model["Cov22"].shape[0])), model["Cov21"]))
 
@@ -91,17 +95,19 @@ class QCartProMP(object):
         self.Y = np.vstack((self.Y, [demonstration]))  # If necessary to review the demo later?
 
         # here we concatenate with joint trajectories the final Cartesian position as a context
-        context = eef_pose[0]  # TODO: only position?
+        context = eef_pose[0] + eef_pose[1] if self.with_orientation else eef_pose[0]
         assert len(context) == self.context_length, \
             "The provided context (eef pose) has {} dims while {} have been declared".format(len(context), self.context_length)
         self.contexts.append(np.array(context).reshape((1, self.context_length)))
 
-        mppi_demo = np.reshape(np.dot(self.MPPI, demonstration).T, (1, self.num_joints * self.nrBasis))
+        mppi_demo = np.reshape(np.dot(self.MPPI, demonstration).T, (1, self.num_joints * self.num_basis))
         demo_and_context = np.hstack((mppi_demo, self.contexts[-1]))
 
         # here we flatten all joint trajectories
         self.W_full = np.vstack((self.W_full, demo_and_context))
 
+        self.mean_W_full = np.mean(self.W_full, axis=0)
+        self.cov_W_full = np.cov(self.W_full.T)
 
     def set_goal(self, obsy, sigmay=1e-6):
         """
@@ -110,21 +116,21 @@ class QCartProMP(object):
         :param sigmay: standard deviation TODO
         :return:
         """
-        obsy = obsy[0]  # TODO: only position?
+        obsy = obsy[0] + obsy[1] if self.with_orientation else obsy[0]
         self.goal = np.array(obsy)
 
-    def generate_trajectory(self, randomness=1e-10):
-        meanNew, CovNew = self._gaussian_conditioning(self.W_full, self.goal)
+    def generate_trajectory(self):
+        if self.goal is None:
+            raise RuntimeError("Set a goal before generating a trajectory")
+
+        meanNew, CovNew = self._gaussian_conditioning(self.goal)
         output = []
         for joint in range(self.num_joints):
-            output.append(np.dot(self.Gn, meanNew[joint*self.nrBasis:(joint+1)*self.nrBasis]))
+            output.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
         return np.array(output).T
 
     def clear_viapoints(self):
-        raise NotImplementedError("No viapoint except goals atm")
-
-    def add_viapoint(self, t, obsy, sigmay=1e-6):
-        raise NotImplementedError("No viapoint except goals atm")
+        self.goal = None
 
     @property
     def num_joints(self):
@@ -141,3 +147,4 @@ class QCartProMP(object):
     @property
     def num_viapoints(self):
         return 0 if self.goal is None else 1
+

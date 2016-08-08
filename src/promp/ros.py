@@ -119,10 +119,10 @@ class FK(object):
 
 
 class QCartProMP(object):
-    def __init__(self, num_joints=7, num_samples=100):
+    def __init__(self, num_joints=7, num_samples=100, with_orientation=True):
         self._num_joints = num_joints
         self._durations = []
-        self.promp = _QCartProMP(num_joints, num_samples=num_samples)
+        self.promp = _QCartProMP(num_joints, num_samples=num_samples, with_orientation=with_orientation)
         self.joint_names = []
 
     def add_demonstration(self, demonstration, eef_pose):

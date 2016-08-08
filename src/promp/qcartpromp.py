@@ -20,8 +20,7 @@ class QCartProMP(object):
         self.Y = np.empty((0, num_samples, num_joints), float)  # all demonstrations
         self.x = np.linspace(0, 1, num_samples)
 
-        self.W = np.empty((self.num_joints, 0, self.nrBasis), float)
-        self.W_full = np.reshape(self.W, (0, self.num_joints * self.nrBasis))
+        self.W_full = np.empty((0, self.num_joints * self.nrBasis + self.context_length))
         self.contexts = []
         self.goal = None
 
@@ -49,7 +48,7 @@ class QCartProMP(object):
         cov_W_full = np.cov(W_full.T)
 
         # total dimension of the concatenated weight vector, which here also contains the context.
-        nDim = len(mean_W_full)
+        nDim = mean_W_full.shape[0]
 
         # number of variables to infer are the weights of the trajectories minus the number of context variables
         q = nDim - obs.shape[0]
@@ -90,18 +89,18 @@ class QCartProMP(object):
         demonstration = stretched_demos.T
 
         self.Y = np.vstack((self.Y, [demonstration]))  # If necessary to review the demo later?
-        mppi_demo = np.reshape(np.dot(self.MPPI, demonstration).T, (self.num_joints, 1, self.nrBasis))
-        self.W = np.hstack((self.W, mppi_demo))
-
-        # here we flatten all joint trajectories
-        self.W_full = self.W.reshape(self.num_demos, self.num_joints * self.nrBasis)
 
         # here we concatenate with joint trajectories the final Cartesian position as a context
         context = eef_pose[0]  # TODO: only position?
         assert len(context) == self.context_length, \
             "The provided context (eef pose) has {} dims while {} have been declared".format(len(context), self.context_length)
-        self.contexts.append(context)
-        self.W_full = np.hstack((self.W_full, self.contexts))
+        self.contexts.append(np.array(context).reshape((1, self.context_length)))
+
+        mppi_demo = np.reshape(np.dot(self.MPPI, demonstration).T, (1, self.num_joints * self.nrBasis))
+        demo_and_context = np.hstack((mppi_demo, self.contexts[-1]))
+
+        # here we flatten all joint trajectories
+        self.W_full = np.vstack((self.W_full, demo_and_context))
 
 
     def set_goal(self, obsy, sigmay=1e-6):

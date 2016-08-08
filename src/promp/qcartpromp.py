@@ -116,9 +116,10 @@ class QCartProMP(object):
 
     def generate_trajectory(self, randomness=1e-10):
         meanNew, CovNew = self._gaussian_conditioning(self.W_full, self.goal)
-        meanNew = meanNew.reshape(self.num_joints, self.nrBasis).T
-        meanNewQ = np.dot(self.Gn, meanNew)
-        return meanNewQ
+        output = []
+        for joint in range(self.num_joints):
+            output.append(np.dot(self.Gn, meanNew[joint*self.nrBasis:(joint+1)*self.nrBasis]))
+        return np.array(output).T
 
     def clear_viapoints(self):
         raise NotImplementedError("No viapoint except goals atm")

@@ -5,7 +5,7 @@ class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, num_samples=100, with_orientation=True):
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.01, num_samples=100, with_orientation=True):
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
@@ -13,6 +13,7 @@ class QCartProMP(object):
 
         self.mu = np.linspace(0, 1, self.num_basis)
         self.z = np.linspace(0, 1, self.nrTraj).reshape((self.nrTraj, 1))
+        self.noise = noise
         self.sigma = sigma * np.ones(self.num_basis)
         self.Gn = self._generate_basis_fx(self.z, self.mu, self.sigma)
 
@@ -29,7 +30,7 @@ class QCartProMP(object):
         self.nQ = self.num_basis * self.num_joints
 
         self.mean_W_full = np.zeros(self.context_length)
-        self.cov_W_full = np.zeros((self.context_length, self.context_length))
+        self.cov_W_full = self.noise * np.ones((self.context_length, self.context_length))
 
     def _generate_basis_fx(self, z, mu, sigma):
         # print "z", z
@@ -49,7 +50,7 @@ class QCartProMP(object):
     def get_cov_context(self):
         return self.cov_W_full[-self.context_length:, -self.context_length:]
 
-    def _gaussian_conditioning(self, obs, noise=.01**2):
+    def _gaussian_conditioning(self, obs):
         # This is an alternative way to condition the ProMP.
         # It is simple compared to the original ProMP because it does not introduce
         # the features. This is possible because we are conditioning the ProMP on
@@ -64,11 +65,20 @@ class QCartProMP(object):
         model["Cov22"] = self.cov_W_full[self.nQ:, self.nQ:]
 
         mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(
-            np.linalg.inv(model["Cov22"] + noise * np.eye(model["Cov22"].shape[0])), obs - self.mean_W_full[self.nQ:]))
+            np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0])), obs - self.mean_W_full[self.nQ:]))
         Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(
-            np.linalg.inv(model["Cov22"] + noise * np.eye(model["Cov22"].shape[0])), model["Cov21"]))
+            np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0])), model["Cov21"]))
 
         return mean_wNew, Cov_wNew
+
+    def gaussian_conditioning_context(self, goal):
+        """
+        Condition a temporary goal (not set) and return the mean and covariance of its context
+        :param goal: [[x, y, z], [x, y, z, w]]
+        :return: (mean, cov) of dimensions 3 and 3, 3 or 7 and 7, 7 if with_orientation
+        """
+        meanNew, CovNew = self._gaussian_conditioning(goal)
+        return meanNew[self.nQ:], CovNew[self.nQ:, self.nQ:]
 
     def add_demonstration(self, demonstration, eef_pose):
         """
@@ -107,19 +117,23 @@ class QCartProMP(object):
         self.W_full = np.vstack((self.W_full, demo_and_context))
 
         self.mean_W_full = np.mean(self.W_full, axis=0)
-        self.cov_W_full = np.cov(self.W_full.T)
+        if self.num_demos > 1:
+            self.cov_W_full = np.cov(self.W_full.T, bias=0)
 
-    def set_goal(self, obsy, sigmay=1e-6):
+    def set_goal(self, obsy):
         """
         Set goal in task space
         :param obsy: [[x, y, z], [x, y, z, w]]
-        :param sigmay: standard deviation TODO
         :return:
         """
         obsy = obsy[0] + obsy[1] if self.with_orientation else obsy[0]
         self.goal = np.array(obsy)
 
     def generate_trajectory(self):
+        """
+        Generate a joint trajectory when a goal has preliminarily been set
+        :return:
+        """
         if self.goal is None:
             raise RuntimeError("Set a goal before generating a trajectory")
 

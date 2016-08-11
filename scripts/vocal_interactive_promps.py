@@ -21,7 +21,8 @@ class VocalInteractiveProMPs(object):
         self.kinect.tts.params.queue_on()
         self.kinect.tts.params.set_language('english')
         self.kinect.tts.start()
-        self.kinect.speech.params.set_confidence(0.5)
+        self.kinect.speech.params.set_confidence(0.3)
+        self.kinect.speech.params.use_system_mic()
         self.kinect.speech.params.set_vocabulary({'Record a motion': 'record',
                                                   'Set a goal': 'goal',
                                                   'ready': 'ready',

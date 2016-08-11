@@ -53,10 +53,13 @@ class VocalInteractiveProMPs(object):
 
         joints, eef = self.arm.recorder.stop()
         self.say('Motion recorded, please wait...', blocking=False)
-        try:
-            self.promp.add_demonstration(joints)
-        except ValueError:
-            self.say("Sorry I failed to record this demonstration")
+        if len(joints.joint_trajectory.points) == 0:
+            self.say('This demo is empty, please retry')
+        else:
+            try:
+                self.promp.add_demonstration(joints, eef)
+            except ValueError:
+                self.say("Sorry I failed to record this demonstration")
 
     def set_goal(self):
         if self.promp.num_primitives > 0:

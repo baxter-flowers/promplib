@@ -1,27 +1,27 @@
 from numpy.linalg import norm
-from trajectory_msgs.msg import JointTrajectory
-from sensor_msgs.msg import JointState
-from moveit_msgs.msg import RobotTrajectory
 from .ros import FK, IK
-from .ros import ProMP
+from .ros import QCartProMP
 
 class InteractiveProMP(object):
     """
     Represents a single skill as a set of several multi-joint proMPs in joint space, each best suited for a specific area
     """
-    def __init__(self, arm, epsilon_ok=0.01, epsilon_new_demo=0.3):
+    def __init__(self, arm, epsilon_ok=0.01, epsilon_new_demo=0.3, with_orientation=True):
         """
         :param arm: string ID of the FK/IK group (left, right, ...)
         :param epsilon_ok: maximum acceptable cartesian distance to the goal
         :param epsilon_new_demo: maximum cartesian distance to enrich an existing promp instead of creating a new
+        :param with_orientation: True for context = position + orientation, False for context = position only
         """
         self.promps = []
         self.fk = FK(arm)
         self.ik = IK(arm)
         self.epsilon_ok = epsilon_ok
         self.epsilon_new_demo = epsilon_new_demo
+        self.remaining_initial_demos = 3  # The first 3 demos will join the first primitive
         self.promp_write_index = -1  # Stores the index of the promp to be enriched, -1 in "new proMP" mode, -2 in "spontaneous demo" mode
         self.promp_read_index = -1  # Stores the index of the promp to be read for the previously set goal, -1 if no goal is known
+        self.with_orientation = with_orientation
 
     @property
     def num_joints(self):
@@ -64,98 +64,114 @@ class InteractiveProMP(object):
         self.promp_write_index = -1 if self.num_primitives == 0 else -2
 
     @staticmethod
-    def _last_state_of_trajectory(trajectory):
-        if isinstance(trajectory, RobotTrajectory):
-            trajectory = trajectory.joint_trajectory
-        elif not isinstance(trajectory, JointTrajectory):
-            raise TypeError("interactive.add_demonstration only accepts RT or JT, got {}".format(type(trajectory)))
-        return JointState(name=trajectory.joint_names,
-                          position=trajectory.points[-1].positions)
+    def _last_point_of_path(path):
+        return [[path.poses[-1].pose.position.x,
+                 path.poses[-1].pose.position.y,
+                 path.poses[-1].pose.position.z],
+                [path.poses[-1].pose.orientation.x,
+                 path.poses[-1].pose.orientation.y,
+                 path.poses[-1].pose.orientation.z,
+                 path.poses[-1].pose.orientation.w]]
 
-    def add_demonstration(self, demonstration):
+    def add_demonstration(self, demonstration, eef_demonstration):
         """
         Add a new  demonstration for this skill
         Automatically determine whether it is added to an existing a new ProMP
-        :param demonstration: RobotTrajectory or JointTrajectory object
+        :param demonstration: Joint-space demonstration RobotTrajectory or JointTrajectory object
+        :param eef_demonstration: Path object of the end effector trajectory corresponding to the joint demo
         :return:
         """
-        #if self.promp_write_index == -2:
-        #    # Spontaneous demonstration
-        #     # If any promp has a distance < epsilon_new_demo, take the closest and enrich it
-        if True:  # Behaviour [2] always determines which primitive must be targeted, see comment in set_goal()
-            min_distance = self.epsilon_new_demo
-            self.promp_write_index = -1  # If none has such distance, create a new one
+        if self.remaining_initial_demos > 0 and self.num_primitives == 1:
+            # Initial behaviour: The first demos are forced to join the same primitive
+            self.promp_write_index = 0
+            self.remaining_initial_demos -= 1
+        else:
+            # Normal behaviour will seek for a target proMP approaching the end eef point
+            self.promp_write_index = -1
             for promp_index, promp in enumerate(self.promps):
-                distance, goal_js = self._get_distance_and_goal(promp, self.fk.get(self._last_state_of_trajectory(demonstration)))
-                if distance < min_distance:
-                    min_distance = distance
+                last_point = self._last_point_of_path(eef_demonstration)
+                if self._is_a_target(promp, last_point):
                     self.promp_write_index = promp_index
+                    self.promp_read_index = -1  # This demo will enrich this promp
+                    break  # Got one!
+                else:
+                    self.promp_write_index = -1
+                    self.promp_read_index = -1  # This demo will end up to a new promp
+                    # Don't break, search for a better one
 
         if self.promp_write_index == -1:
             # New ProMP requested
-            self.promps.append(ProMP(len(self.ik.joints)))
+            self.promps.append(QCartProMP(len(self.ik.joints), with_orientation=self.with_orientation))
             self.promp_write_index = self.num_primitives - 1
 
         # ProMP to be enriched identified, now add it the demonstration
-        self.promps[self.promp_write_index].add_demonstration(demonstration)
+        self.promps[self.promp_write_index].add_demonstration(demonstration, eef_demonstration)
         self.clear_goal()  # Invalidate the goal if any, the necessary ProMP might have changed
 
     @staticmethod
-    def _distance_position(pose1, pose2):
-        return norm(pose1[0] - pose2[0])
+    def _get_mean_cov_position(promp):
+        cov = promp.promp.get_cov_context()
+        mean = promp.promp.get_mean_context()
+        position_cov = cov[:3,:3]
+        position_mean = mean[:3]
+        return position_mean, position_cov
+
+    def _is_a_target(self, promp, goal):
+        """
+        Returns True whether the specified ProMP meets the requirements to be a possible target of the goal
+        :param promp:
+        :param goal:
+        :return: bool
+        """
+        position_mean, position_cov = self._get_mean_cov_position(promp)
+        for dimension in range(3):
+            if not position_mean[dimension] - 2*position_cov[dimension][dimension]\
+                    < goal[0][dimension]\
+                    < position_mean[dimension] + 2*position_cov[dimension][dimension]:
+                return False
+        return True
+
+    def _is_reachable(self, promp, goal):
+        """
+        Returns True whether the specified ProMP is able to reach the goal with enough precision
+        :param promp:
+        :param goal:
+        :return: bool
+        """
+        mean, cov = promp.gaussian_conditioning_context(goal)
+        position_mean = mean[:3]
+        return norm(position_mean - goal[0]) < self.epsilon_ok
 
     def set_goal(self, x_des):
         """
-        Set a new joint-space goal, and determine which primitive will be used
-        :param x_des: desired joint-space goal
+        Set a new task-space goal, and determine which primitive will be used
+        :param x_des: desired task-space goal
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
-        self.clear_goal()  # TODO this erases also non-goal viapoints, replace only the goal?
+        self.clear_goal()
 
         if self.num_primitives > 0:
-            # Browse all proMPs, sort them be increasing distance and focus on the first
-            promps_for_x_des = [(promp_index, self._get_distance_and_goal(promp, x_des)) for promp_index, promp in enumerate(self.promps)]
-            promps_for_x_des = sorted(promps_for_x_des, key=lambda x: x[1][0])  # Sort by increasing distance
-
-            # We got the closest proMP, now decide what to do regarding its distance to the goal
-            promp_index, distance, goal_js = promps_for_x_des[0][0], promps_for_x_des[0][1][0], promps_for_x_des[0][1][1]
-            if distance < self.epsilon_ok:
-                #promp.clear_viapoints()  # TODO this erases also non-goal viapoints, replace only the goal?
-                self.promps[promp_index].set_goal(goal_js)
-                self.promp_read_index = promp_index
-                return True
-            # Now the user wants to reach a goal that requires a new demo. Two possible behaviours:
-            # EITHER we rely on the user by assuming that the next demo will be for primitive #promp_index (is it a useful info?) [1]
-            # OR we don't rely on him and recompute in any case which promp will be targeted when the new demo is given [2]
-            # [1] seems risky since the user might demonstrate a slightly/completely different goal that what he requested
-            # and that could make the difference for targeting another primitive in the end
-            # To activate [1], remove the if True in add_demonstration()
-            elif distance < self.epsilon_new_demo:
-                self.promp_write_index = promp_index
-                self.promp_read_index = -1  # A new demo has been requested
-                return False
-            else:
-                self.promp_write_index = -1
-                self.promp_read_index = -1  # A new promp has been requested
-                return False
-
-    def _get_distance_and_goal(self, promp, x_des):
-        """
-        Return the distance and joint space goal of the given promp from x_des
-        """
-        bounds = [promp.goal_bounds[joint] for joint in self.ik.joints]  # Reordering in case order in IK doesn't match promp order
-        goal_js = self.ik.get(x_des, bounds=bounds)
-        x_tilde = self.fk.get(goal_js[1])
-        distance = self._distance_position(x_tilde, x_des)
-        return distance if goal_js[0] else float('inf'), goal_js[1]
+            for promp_index, promp in enumerate(self.promps):
+                if self._is_a_target(promp, x_des):
+                    if self._is_reachable(promp, x_des):
+                        self.promps[promp_index].set_goal(x_des)
+                        self.promp_read_index = promp_index
+                        return True
+                    else:
+                        self.promp_write_index = promp_index
+                        self.promp_read_index = -1  # A new demo is requested
+                        return False
+                else:
+                    self.promp_write_index = -1
+                    self.promp_read_index = -1  # A new promp is requested
+                    return False
 
     def generate_trajectory(self, force=False, randomness=1e-10, duration=-1):
         """
         Generate a new trajectory from the given demonstrations and parameters
-        :param x_des: Desired goal [[x, y, z], [x, y, z, w]]
-        :param force: True
+        :param force: Force generation even if a demo has been requested to reach it
         :param duration: Desired duration, auto if duration < 0
-        :return: the generated RobotTrajectory message OR
+        :return: the generated RobotTrajectory message
         """
         if self.promp_read_index < 0:
             if force:

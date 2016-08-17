@@ -78,13 +78,7 @@ class InteractiveProMP(object):
         :param eef_demonstration: Path object of the end effector trajectory corresponding to the joint demo
         :return:
         """
-        if self.remaining_initial_demos > 0 and self.num_primitives == 1:
-            # Initial behaviour: The first demos are forced to join the same primitive
-            self.promp_write_index = 0
-            self.remaining_initial_demos -= 1
-        else:
-            # Normal behaviour will seek for a target proMP approaching the end eef point
-            self.promp_write_index = -1
+        if self.promp_write_index == -1:   # Do not override this setting, the mp might have been forced to reach the minimum number of demos
             for promp_index, promp in enumerate(self.promps):
                 last_point = self._last_point_of_path(eef_demonstration)
                 if self._is_a_target(promp, last_point):
@@ -154,7 +148,7 @@ class InteractiveProMP(object):
         :param x_des: desired task-space goal
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
-
+        self.promp_write_index = -1
         if self.num_primitives > 0:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, x_des):
@@ -168,9 +162,8 @@ class InteractiveProMP(object):
                         self.promp_read_index = -1  # A new demo is requested
                         return False
                 else:
-                    self.promp_write_index = -1
                     self.promp_read_index = -1  # A new promp is requested
-                    return False
+            return False
 
     def generate_trajectory(self, force=False, duration=-1):
         if self.goal is None:
@@ -182,5 +175,5 @@ class InteractiveProMP(object):
         return self.promps[self.promp_read_index].generate_trajectory(self.goal, duration)
 
     def plot(self, eef, is_goal=False):
-        for promp in self.promps:
-            promp.plot(eef, is_goal)
+        for promp_id, promp in enumerate(self.promps):
+            promp.plot(eef, str(promp_id), is_goal)

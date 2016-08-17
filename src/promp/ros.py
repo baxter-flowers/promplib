@@ -193,8 +193,8 @@ class QCartProMP(object):
             rt.joint_trajectory.points.append(jtp)
         return rt
 
-    def plot(self, eef, is_goal):
-        self.promp.plot(eef, is_goal)
+    def plot(self, eef, stamp='', is_goal=False):
+        self.promp.plot(eef, stamp, is_goal)
 
 
 

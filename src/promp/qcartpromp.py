@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.interpolate import interp1d
-from os.path import join
+from os.path import join, exists
+from os import makedirs
 import matplotlib.pyplot as plt
 
 class QCartProMP(object):
@@ -153,7 +154,9 @@ class QCartProMP(object):
     def num_viapoints(self):
         return 0 if self.goal is None else 1
 
-    def plot(self, eef, is_goal=False):
+    def plot(self, eef, stamp='', is_goal=False, path='/tmp/plots'):
+        if not exists(path):
+            makedirs(path)
         f = plt.figure(facecolor="white")
         ax = f.add_subplot(111)
         plt.rcParams['font.size'] = 20
@@ -166,9 +169,9 @@ class QCartProMP(object):
             for point in self.plotted_points:
                 ax.plot(dim, point[dim], marker='o', markerfacecolor='black', markersize=7)
         ax.set_ylim([-1, 1])
-        savefile = join('/', 'tmp', 'pouet', str(self.plot_id) + '_goal') if is_goal else join('/', 'tmp', 'pouet', str(self.plot_id))
+        filename = '_'.join(['mp' + stamp, 'demo' + str(self.plot_id), 'goal' if is_goal else ''])
         self.plot_id += 1
         self.plotted_points.append(eef[0])
         f.set_size_inches(12.8, 10.24)
-        plt.savefig(savefile + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
+        plt.savefig(join(path, filename) + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
         plt.close()

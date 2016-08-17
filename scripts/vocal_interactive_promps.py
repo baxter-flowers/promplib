@@ -9,9 +9,9 @@ import rospy
 rospy.init_node('vocal_interactive_promps')
 
 class VocalInteractiveProMPs(object):
-    def __init__(self, arm='left'):
+    def __init__(self, arm='right'):
         # MOTION
-        self.promp = InteractiveProMP(arm)
+        self.promp = InteractiveProMP(arm, with_orientation=False)
         self.arm = ArmCommander(arm, ik='robot')
         self.init = self.arm.get_current_state()
 
@@ -59,8 +59,13 @@ class VocalInteractiveProMPs(object):
         else:
             try:
                 self.promp.add_demonstration(joints, eef)
-            except ValueError:
+            except ValueError as e:
+                print(e)
                 self.say("Sorry I failed to record this demonstration")
+            else:
+                self.promp.plot([[eef.poses[-1].pose.position.x,
+                                  eef.poses[-1].pose.position.y,
+                                  eef.poses[-1].pose.position.z]])
 
     def set_goal(self):
         if self.promp.num_primitives > 0:
@@ -70,7 +75,9 @@ class VocalInteractiveProMPs(object):
             while choice != 'ready' and not rospy.is_shutdown():
                 choice = self.read_user_input(['ready'])
 
-            goal_set = self.promp.set_goal(self.arm.endpoint_pose())
+            eef = self.arm.endpoint_pose()
+            goal_set = self.promp.set_goal(eef)
+            self.promp.plot(eef, True)
             if goal_set:
                 self.say('I can reach this object, let me demonstrate', blocking=False)
                 self.arm.move_to_controlled(self.init)
@@ -95,18 +102,21 @@ class VocalInteractiveProMPs(object):
     def run(self):
         while not rospy.is_shutdown():
             self.arm.move_to_controlled(self.init)
-            if self.promp.num_demos > 3:
+            if len(self.promp.need_demonstrations()) > 0 or self.promp.num_primitives == 0:
+                needs_demo = 0 if self.promp.num_primitives == 0 else self.promp.need_demonstrations().keys()[0]
+                self.say("Record a demo for Pro MP {}, say stop to finish".format(needs_demo + 1))
+                self.record_motion()
+                self.say('There are {} primitive{} and {} demonstration{}'.format(self.promp.num_primitives,
+                                                                              's' if self.promp.num_primitives > 1 else '',
+                                                                              self.promp.num_demos,
+                                                                              's' if self.promp.num_demos > 1 else ''))
+            else:
                 self.say('Do you want to record a motion or set a new goal?')
                 choice = self.read_user_input(['record', 'goal'])
                 if choice == 'record':
                     self.record_motion()
                 elif choice == 'goal':
                     self.set_goal()
-            else:
-                self.say("Let's record a {} demo, say stop to finish".format(['first', 'second', 'third', ''][self.promp.num_demos%4]))
-                self.record_motion()
-            self.say('There are {} primitive{} and {} demonstration{}'.format(self.promp.num_primitives,
-                                                                                         's' if self.promp.num_primitives > 1 else '', self.promp.num_demos,
-                                                                                         's' if self.promp.num_demos > 1 else ''))
+
 
 VocalInteractiveProMPs().run()

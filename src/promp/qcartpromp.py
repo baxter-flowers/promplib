@@ -1,15 +1,18 @@
 import numpy as np
 from scipy.interpolate import interp1d
+from os.path import join
+import matplotlib.pyplot as plt
 
 class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.01, num_samples=100, with_orientation=True):
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.01, num_samples=100, with_orientation=True, std_factor=2):
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
         self.context_length = 7 if with_orientation else 3
+        self.std_factor = std_factor
 
         self.mu = np.linspace(0, 1, self.num_basis)
         self.z = np.linspace(0, 1, self.nrTraj).reshape((self.nrTraj, 1))
@@ -32,6 +35,9 @@ class QCartProMP(object):
         self.mean_W_full = np.zeros(self.context_length)
         self.cov_W_full = self.noise * np.ones((self.context_length, self.context_length))
 
+        self.plot_id = 0
+        self.plotted_points = []
+
     def _generate_basis_fx(self, z, mu, sigma):
         # print "z", z
         # print "m", mu
@@ -50,7 +56,16 @@ class QCartProMP(object):
     def get_cov_context(self):
         return self.cov_W_full[-self.context_length:, -self.context_length:]
 
-    def _gaussian_conditioning(self, obs):
+    def get_std_context(self):
+        return np.sqrt(np.diagonal(self.get_cov_context()))
+
+    def gaussian_conditioning_joints(self, goal):
+        """
+        Condition a temporary goal (not set) and return the mean and covariance of the joints
+        :param goal: [[x, y, z], [x, y, z, w]]
+        :return: (mean, cov)
+        """
+
         # This is an alternative way to condition the ProMP.
         # It is simple compared to the original ProMP because it does not introduce
         # the features. This is possible because we are conditioning the ProMP on
@@ -64,21 +79,12 @@ class QCartProMP(object):
         model["Cov21"] = self.cov_W_full[self.nQ:, :self.nQ]
         model["Cov22"] = self.cov_W_full[self.nQ:, self.nQ:]
 
-        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(
-            np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0])), obs - self.mean_W_full[self.nQ:]))
-        Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(
-            np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0])), model["Cov21"]))
+        inv_context = np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0]))
+        obs_position = goal[0]
+        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(inv_context, obs_position - self.mean_W_full[self.nQ:]))
+        Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(inv_context, model["Cov21"]))
 
         return mean_wNew, Cov_wNew
-
-    def gaussian_conditioning_context(self, goal):
-        """
-        Condition a temporary goal (not set) and return the mean and covariance of its context
-        :param goal: [[x, y, z], [x, y, z, w]]
-        :return: (mean, cov) of dimensions 3 and 3, 3 or 7 and 7, 7 if with_orientation
-        """
-        meanNew, CovNew = self._gaussian_conditioning(goal)
-        return meanNew[self.nQ:], CovNew[self.nQ:, self.nQ:]
 
     def add_demonstration(self, demonstration, eef_pose):
         """
@@ -120,31 +126,16 @@ class QCartProMP(object):
         if self.num_demos > 1:
             self.cov_W_full = np.cov(self.W_full.T, bias=0)
 
-    def set_goal(self, obsy):
-        """
-        Set goal in task space
-        :param obsy: [[x, y, z], [x, y, z, w]]
-        :return:
-        """
-        obsy = obsy[0] + obsy[1] if self.with_orientation else obsy[0]
-        self.goal = np.array(obsy)
-
-    def generate_trajectory(self):
+    def generate_trajectory(self, goal):
         """
         Generate a joint trajectory when a goal has preliminarily been set
         :return:
         """
-        if self.goal is None:
-            raise RuntimeError("Set a goal before generating a trajectory")
-
-        meanNew, CovNew = self._gaussian_conditioning(self.goal)
+        meanNew, CovNew = self.gaussian_conditioning_joints(goal)
         output = []
         for joint in range(self.num_joints):
             output.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
         return np.array(output).T
-
-    def clear_viapoints(self):
-        self.goal = None
 
     @property
     def num_joints(self):
@@ -162,3 +153,22 @@ class QCartProMP(object):
     def num_viapoints(self):
         return 0 if self.goal is None else 1
 
+    def plot(self, eef, is_goal=False):
+        f = plt.figure(facecolor="white")
+        ax = f.add_subplot(111)
+        plt.rcParams['font.size'] = 20
+        mean = self.get_mean_context()
+        std = self.get_std_context()
+        colors = ['tomato', 'darkseagreen', 'cornflowerblue']
+        for dim in range(self.context_length):
+            ax.errorbar(dim, mean[dim], self.std_factor*std[dim], color=colors[dim], elinewidth=20)
+            ax.plot(dim, eef[0][dim], marker='o', markerfacecolor='red', markersize=10)
+            for point in self.plotted_points:
+                ax.plot(dim, point[dim], marker='o', markerfacecolor='black', markersize=7)
+        ax.set_ylim([-1, 1])
+        savefile = join('/', 'tmp', 'pouet', str(self.plot_id) + '_goal') if is_goal else join('/', 'tmp', 'pouet', str(self.plot_id))
+        self.plot_id += 1
+        self.plotted_points.append(eef[0])
+        f.set_size_inches(12.8, 10.24)
+        plt.savefig(savefile + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
+        plt.close()

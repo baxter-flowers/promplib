@@ -119,10 +119,10 @@ class FK(object):
 
 
 class QCartProMP(object):
-    def __init__(self, num_joints=7, num_samples=100, with_orientation=True):
+    def __init__(self, num_joints=7, num_samples=100, with_orientation=True, std_factor=2):
         self._num_joints = num_joints
         self._durations = []
-        self.promp = _QCartProMP(num_joints, num_samples=num_samples, with_orientation=with_orientation)
+        self.promp = _QCartProMP(num_joints, num_samples=num_samples, with_orientation=with_orientation, std_factor=std_factor)
         self.joint_names = []
 
     def add_demonstration(self, demonstration, eef_pose):
@@ -176,31 +176,14 @@ class QCartProMP(object):
     def mean_duration(self):
         return float(mean(self._durations))
 
-    def clear_viapoints(self):
-        self.promp.clear_viapoints()
-
-    def add_viapoint(self, t, obsys, sigmay=1e-6):
-        raise NotImplementedError()
-
-    def set_goal(self, obsy, sigmay=1e-6):
-        """
-        Set the task-space goal
-        :param obsy: Observation [[x, y, z], [x, y, z, w]]
-        :param sigmay:
-        :return:
-        """
-        self.promp.set_goal(obsy, sigmay)
-
-    def set_start(self, obsy, sigmay=1e-6):
-        raise NotImplementedError()
-
-    def generate_trajectory(self, duration=-1):
+    def generate_trajectory(self, goal, duration=-1):
         """
         Generate a new trajectory from the given demonstrations and parameters
+        :param goal: [[], []]
         :param duration: Desired duration, auto if duration < 0
         :return: the generated RobotTrajectory message
         """
-        trajectory_array = self.promp.generate_trajectory()
+        trajectory_array = self.promp.generate_trajectory(goal)
         rt = RobotTrajectory()
         rt.joint_trajectory.joint_names = self.joint_names
         duration = float(self.mean_duration) if duration < 0 else duration
@@ -209,6 +192,10 @@ class QCartProMP(object):
             jtp = JointTrajectoryPoint(positions=map(float, point), time_from_start=Duration(time))
             rt.joint_trajectory.points.append(jtp)
         return rt
+
+    def plot(self, eef, is_goal):
+        self.promp.plot(eef, is_goal)
+
 
 
 class ProMP(object):

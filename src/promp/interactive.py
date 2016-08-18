@@ -1,7 +1,6 @@
 from numpy.linalg import norm
-from .ros import FK, IK
-from .ros import QCartProMP
-from moveit_msgs.msg import RobotState
+from .ik import FK, IK
+from .qcartpromp import QCartProMP
 
 class InteractiveProMP(object):
     """
@@ -60,28 +59,17 @@ class InteractiveProMP(object):
             return "goal is ready to be generated with Pro MP {}".format(self.promp_read_index)
         return "unknown"
 
-    @staticmethod
-    def _last_point_of_path(path):
-        return [[path.poses[-1].pose.position.x,
-                 path.poses[-1].pose.position.y,
-                 path.poses[-1].pose.position.z],
-                [path.poses[-1].pose.orientation.x,
-                 path.poses[-1].pose.orientation.y,
-                 path.poses[-1].pose.orientation.z,
-                 path.poses[-1].pose.orientation.w]]
-
     def add_demonstration(self, demonstration, eef_demonstration):
         """
         Add a new  demonstration for this skill
         Automatically determine whether it is added to an existing a new ProMP
-        :param demonstration: Joint-space demonstration RobotTrajectory or JointTrajectory object
-        :param eef_demonstration: Path object of the end effector trajectory corresponding to the joint demo
+        :param demonstration: Joint-space demonstration demonstration[time][joint]
+        :param last eef: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
         :return:
         """
         if self.promp_write_index == -1:   # Do not override this setting, the mp might have been forced to reach the minimum number of demos
             for promp_index, promp in enumerate(self.promps):
-                last_point = self._last_point_of_path(eef_demonstration)
-                if self._is_a_target(promp, last_point):
+                if self._is_a_target(promp, eef_demonstration[-1]):
                     self.promp_write_index = promp_index
                     self.promp_read_index = -1  # This demo will enrich this promp
                     break  # Got one!
@@ -96,7 +84,7 @@ class InteractiveProMP(object):
             self.promp_write_index = self.num_primitives - 1
 
         # ProMP to be enriched identified, now add it the demonstration
-        self.promps[self.promp_write_index].add_demonstration(demonstration, eef_demonstration)
+        self.promps[self.promp_write_index].add_demonstration(demonstration, eef_demonstration[-1])
 
     def need_demonstrations(self):
         """
@@ -107,8 +95,8 @@ class InteractiveProMP(object):
 
     @staticmethod
     def _get_mean_std_position(promp):
-        std = promp.promp.get_std_context()
-        mean = promp.promp.get_mean_context()
+        std = promp.get_std_context()
+        mean = promp.get_mean_context()
         position_std = std[:3]
         position_mean = mean[:3]
         return position_mean, position_std
@@ -116,8 +104,8 @@ class InteractiveProMP(object):
     def _is_a_target(self, promp, goal):
         """
         Returns True whether the specified ProMP meets the requirements to be a possible target of the goal
-        :param promp:
-        :param goal:
+        :param promp: Q-Cartesian pro MP object
+        :param goal: [[x, y, z], [qx, qy, qz, qw]]
         :return: bool
         """
         position_mean, position_std = self._get_mean_std_position(promp)
@@ -128,15 +116,14 @@ class InteractiveProMP(object):
                 return False
         return True
 
-    @staticmethod
-    def _last_point_to_state(trajectory):
-        rs = RobotState()
-        rs.joint_state.name = trajectory.joint_trajectory.joint_names
-        rs.joint_state.position = trajectory.joint_trajectory.points[-1].positions
-        return rs
-
     def is_reached(self, trajectory, goal):
-        reached_goal = self.fk.get(self._last_point_to_state(trajectory))
+        """
+        Returns True whether the specified trajectory actually reaches the goal with accepted precision
+        :param trajectory: [[q1, q2, .. qn], [q1, q2, .. qn]]
+        :param goal: [[x, y, z], [qx, qy, qz, qw]]
+        :return: bool
+        """
+        reached_goal = self.fk.get(trajectory[-1])
         distance = norm(reached_goal[0] - goal[0])
         reached = distance < self.epsilon_ok
         print("Distance = {}m from goal".format(distance))
@@ -165,15 +152,15 @@ class InteractiveProMP(object):
                     self.promp_read_index = -1  # A new promp is requested
             return False
 
-    def generate_trajectory(self, force=False, duration=-1):
+    def generate_trajectory(self, force=False):
         if self.goal is None:
             raise RuntimeError("No goal set, use set_goal first")
 
         if not force and self.promp_read_index < 0:
             raise RuntimeError("No ProMP can reach this goal, use force=True to force")
 
-        return self.promps[self.promp_read_index].generate_trajectory(self.goal, duration)
+        return self.promps[self.promp_read_index].generate_trajectory(self.goal)
 
-    def plot(self, eef, is_goal=False):
+    def plot(self, eef, is_goal=False, path=''):
         for promp_id, promp in enumerate(self.promps):
-            promp.plot(eef, str(promp_id), is_goal)
+            promp.plot(eef, str(promp_id), is_goal, path)

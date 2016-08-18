@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from promp.interactive import InteractiveProMP
+from promp.ros import InteractiveProMP
 from baxter_commander import ArmCommander
 from kinect2.client import Kinect2Client
 import rospy

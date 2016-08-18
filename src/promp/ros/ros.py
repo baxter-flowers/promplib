@@ -1,5 +1,4 @@
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
-from geometry_msgs.msg import PoseStamped
 from sensor_msgs.msg import JointState
 from moveit_msgs.msg import RobotTrajectory, RobotState
 from nav_msgs.msg import Path
@@ -7,10 +6,12 @@ from numpy import mean, linspace, array
 from rospy import Duration
 from matplotlib.pyplot import show, legend
 from transformations import pose_to_list, list_to_raw_list, raw_list_to_list
-from .promp import NDProMP
-from .qcartpromp import QCartProMP as _QCartProMP
-from .ik import IK as _IK
-from .ik import FK as _FK
+from ..promp import NDProMP
+from ..qcartpromp import QCartProMP as _QCartProMP
+from .interactive import InteractiveProMP as _InteractiveProMP
+from ..ik import IK as _IK
+from ..ik import FK as _FK
+from .bridge import ROSBridge
 
 
 class IK(object):
@@ -61,7 +62,6 @@ class IK(object):
             # Find the last valid state
             return JointState(position=trajectory.points[-1].positions,
                               name=trajectory.joint_names) if len(trajectory.points) > 0 else None
-
 
         trajectory = JointTrajectory(joint_names=self._ik.joints)
         for point_idx, x_des in enumerate(x_des_list):
@@ -118,12 +118,15 @@ class FK(object):
         return self._fk.get([state.position[state.name.index(joint)] for joint in self.joints])
 
 
-class QCartProMP(object):
-    def __init__(self, num_joints=7, num_samples=100, with_orientation=True, std_factor=2):
-        self._num_joints = num_joints
+class QCartProMP(_QCartProMP):
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.01, num_samples=100, with_orientation=True, std_factor=2):
+        super(QCartProMP, self).__init__(num_joints, num_basis, sigma, noise, num_samples, with_orientation, std_factor)
         self._durations = []
-        self.promp = _QCartProMP(num_joints, num_samples=num_samples, with_orientation=with_orientation, std_factor=std_factor)
         self.joint_names = []
+
+    @property
+    def mean_duration(self):
+        return float(mean(self._durations))
 
     def add_demonstration(self, demonstration, eef_pose):
         """
@@ -132,49 +135,15 @@ class QCartProMP(object):
         :param eef_pose: Path object of end effector or PoseStamped/list of the goal only
         :return:
         """
-        if isinstance(demonstration, RobotTrajectory):
-            demonstration = demonstration.joint_trajectory
-        elif not isinstance(demonstration, JointTrajectory):
-            raise TypeError("ros.QCartProMP.add_demonstration only accepts RT or JT, got {}".format(type(demonstration)))
-
-        if isinstance(eef_pose, Path):
-            eef_pose = eef_pose.poses[-1]
-        if isinstance(eef_pose, PoseStamped):
-            eef_pose = [[eef_pose.pose.position.x,
-                         eef_pose.pose.position.y,
-                         eef_pose.pose.position.z],
-                        [eef_pose.pose.orientation.x,
-                         eef_pose.pose.orientation.y,
-                         eef_pose.pose.orientation.z,
-                         eef_pose.pose.orientation.w]]
-
+        demonstration = ROSBridge.to_joint_trajectory(demonstration)
         if len(self.joint_names) > 0 and self.joint_names != demonstration.joint_names:
             raise ValueError("Joints must be the same and in same order for all demonstrations, this demonstration has joints {} while we had {}".format(demonstration.joint_names, self.joint_names))
 
         self._durations.append(demonstration.points[-1].time_from_start.to_sec() - demonstration.points[0].time_from_start.to_sec())
         self.joint_names = demonstration.joint_names
-        demo_array = [jtp.positions for jtp in demonstration.points]
-        self.promp.add_demonstration(demo_array, eef_pose)
-
-    @property
-    def num_joints(self):
-        return self._num_joints
-
-    @property
-    def num_demos(self):
-        return self.promp.num_demos
-
-    @property
-    def num_points(self):
-        return self.promp.num_points
-
-    @property
-    def num_viapoints(self):
-        return self.promp.num_viapoints
-
-    @property
-    def mean_duration(self):
-        return float(mean(self._durations))
+        demo_array = ROSBridge.trajectory_to_numpy(demonstration)
+        eef_pose_array = ROSBridge.path_to_numpy(eef_pose)
+        super(QCartProMP, self).add_demonstration(demo_array, eef_pose_array[-1])
 
     def generate_trajectory(self, goal, duration=-1):
         """
@@ -183,19 +152,9 @@ class QCartProMP(object):
         :param duration: Desired duration, auto if duration < 0
         :return: the generated RobotTrajectory message
         """
-        trajectory_array = self.promp.generate_trajectory(goal)
-        rt = RobotTrajectory()
-        rt.joint_trajectory.joint_names = self.joint_names
-        duration = float(self.mean_duration) if duration < 0 else duration
-        for point_idx, point in enumerate(trajectory_array):
-            time = point_idx*duration/float(self.num_points)
-            jtp = JointTrajectoryPoint(positions=map(float, point), time_from_start=Duration(time))
-            rt.joint_trajectory.points.append(jtp)
-        return rt
-
-    def plot(self, eef, stamp='', is_goal=False, path=''):
-        self.promp.plot(eef, stamp, is_goal, path)
-
+        trajectory_array = super(QCartProMP, self).generate_trajectory(goal)
+        return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
+                                             float(self.mean_duration) if duration < 0 else duration)
 
 
 class ProMP(object):

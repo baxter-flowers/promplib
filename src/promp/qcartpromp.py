@@ -3,6 +3,8 @@ from scipy.interpolate import interp1d
 from os.path import join, exists
 from os import makedirs
 import matplotlib.pyplot as plt
+from tf.transformations import quaternion_from_euler, euler_from_quaternion
+
 
 class QCartProMP(object):
     """
@@ -12,7 +14,7 @@ class QCartProMP(object):
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
-        self.context_length = 7 if with_orientation else 3
+        self.context_length = 6 if with_orientation else 3
         self.std_factor = std_factor
 
         self.mu = np.linspace(0, 1, self.num_basis)
@@ -81,8 +83,8 @@ class QCartProMP(object):
         model["Cov22"] = self.cov_W_full[self.nQ:, self.nQ:]
 
         inv_context = np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0]))
-        obs_position = goal[0]
-        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(inv_context, obs_position - self.mean_W_full[self.nQ:]))
+        obs = np.hstack((goal[0], euler_from_quaternion(goal[1]))) if self.with_orientation else goal[0]
+        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(inv_context, obs - self.mean_W_full[self.nQ:]))
         Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(inv_context, model["Cov21"]))
 
         return mean_wNew, Cov_wNew
@@ -112,7 +114,7 @@ class QCartProMP(object):
         self.Y = np.vstack((self.Y, [demonstration]))  # If necessary to review the demo later?
 
         # here we concatenate with joint trajectories the final Cartesian position as a context
-        context = eef_pose[0] + eef_pose[1] if self.with_orientation else eef_pose[0]
+        context = np.hstack((eef_pose[0], euler_from_quaternion(eef_pose[1]))) if self.with_orientation else eef_pose[0]
         assert len(context) == self.context_length, \
             "The provided context (eef pose) has {} dims while {} have been declared".format(len(context), self.context_length)
         self.contexts.append(np.array(context).reshape((1, self.context_length)))

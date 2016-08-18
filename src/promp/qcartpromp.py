@@ -156,24 +156,44 @@ class QCartProMP(object):
     def num_viapoints(self):
         return 0 if self.goal is None else 1
 
-    def plot(self, eef, stamp='', is_goal=False, path='/tmp/plots'):
-        if not exists(path):
-            makedirs(path)
-        f = plt.figure(facecolor="white")
-        ax = f.add_subplot(111)
-        plt.rcParams['font.size'] = 20
+    def plot(self, eef, stamp='', is_goal=False, path=''):
+        eef[1] = euler_from_quaternion(eef[1])
+
         mean = self.get_mean_context()
         std = self.get_std_context()
+
+        f = plt.figure(facecolor="white")
+
+        # Position
+        ax = f.add_subplot(121) if self.with_orientation else f.add_subplot(111)
+        plt.rcParams['font.size'] = 20
+
         colors = ['tomato', 'darkseagreen', 'cornflowerblue']
-        for dim in range(self.context_length):
-            ax.errorbar(dim, mean[dim], self.std_factor*std[dim], color=colors[dim], elinewidth=20)
+        for dim in range(3):
+            ax.errorbar(dim, mean[dim], self.std_factor*std[dim], color=colors[dim % len(colors)], elinewidth=20)
             ax.plot(dim, eef[0][dim], marker='o', markerfacecolor='red', markersize=10)
             for point in self.plotted_points:
-                ax.plot(dim, point[dim], marker='o', markerfacecolor='black', markersize=7)
+                ax.plot(dim, point[0][dim], marker='o', markerfacecolor='black', markersize=7)
         ax.set_ylim([-1, 1])
-        filename = '_'.join(['mp' + stamp, 'demo' + str(self.plot_id), 'goal' if is_goal else ''])
-        self.plot_id += 1
-        self.plotted_points.append(eef[0])
-        f.set_size_inches(12.8, 10.24)
-        plt.savefig(join(path, filename) + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
-        plt.close()
+
+        # Orientation
+        if self.with_orientation:
+            ax = f.add_subplot(122)
+            for dim in range(3):
+                ax.errorbar(dim, mean[dim], self.std_factor * std[dim], color=colors[dim % len(colors)], elinewidth=20)
+                ax.plot(dim, eef[1][dim], marker='o', markerfacecolor='red', markersize=10)
+                for point in self.plotted_points:
+                    ax.plot(dim, point[1][dim], marker='o', markerfacecolor='black', markersize=7)
+            ax.set_ylim([-3.15, 3.15])
+
+        # Save plots
+        if path != '':
+            if not exists(path):
+                makedirs(path)
+            filename = '_'.join(['mp' + stamp, 'demo' + str(self.plot_id), 'goal' if is_goal else ''])
+            self.plot_id += 1
+            self.plotted_points.append(eef)
+            f.set_size_inches(12.8, 10.24)
+            plt.savefig(join(path, filename) + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
+        else:
+            plt.show()

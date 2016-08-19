@@ -30,13 +30,13 @@ class QCartProMP(_QCartProMP):
         eef_pose_array = ROSBridge.path_to_numpy(eef_pose)
         super(QCartProMP, self).add_demonstration(demo_array, eef_pose_array[-1])
 
-    def generate_trajectory(self, goal, duration=-1):
+    def generate_trajectory(self, goal, duration=-1, path_plot=''):
         """
         Generate a new trajectory from the given demonstrations and parameters
         :param goal: [[], []]
         :param duration: Desired duration, auto if duration < 0
         :return: the generated RobotTrajectory message
         """
-        trajectory_array = super(QCartProMP, self).generate_trajectory(goal)
+        trajectory_array = super(QCartProMP, self).generate_trajectory(goal, path_plot)
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              float(self.mean_duration) if duration < 0 else duration)

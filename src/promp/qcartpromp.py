@@ -38,7 +38,6 @@ class QCartProMP(object):
         self.mean_W_full = np.zeros(self.context_length)
         self.cov_W_full = self.noise * np.ones((self.context_length, self.context_length))
 
-        self.plot_id = 0
         self.plotted_points = []
 
     def _generate_basis_fx(self, z, mu, sigma):
@@ -149,7 +148,18 @@ class QCartProMP(object):
         output = []
         for joint in range(self.num_joints):
             output.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
-        return np.array(output).T
+        output = np.array(output).T
+
+        if path_plot != '':
+            lines = []
+            for joint in range(self.num_joints):
+                lines.append(plt.plot(self.x, output))
+            plt.legend(['Joint {}'.format(j) for j in range(self.num_joints)], loc='upper left')
+            plt.savefig(join(path_plot, 'output') + '.svg', dpi=100, transparent=False)
+            plt.close('all')
+
+        self.plot_step(goal_rpy, 'goal', True, path='/tmp/plots')
+        return output
 
     @property
     def num_joints(self):
@@ -167,9 +177,7 @@ class QCartProMP(object):
     def num_viapoints(self):
         return 0 if self.goal is None else 1
 
-    def plot(self, eef, stamp='', is_goal=False, path=''):
-        eef[1] = euler_from_quaternion(eef[1])
-
+    def plot_step(self, eef, stamp='', is_goal=False, path=''):
         mean = self.get_mean_context()
         std = self.get_std_context()
 
@@ -177,7 +185,7 @@ class QCartProMP(object):
 
         # Position
         ax = f.add_subplot(121) if self.with_orientation else f.add_subplot(111)
-        plt.rcParams['font.size'] = 20
+        ax.set_title('End effector position (x, y, z)')
 
         colors = ['tomato', 'darkseagreen', 'cornflowerblue']
         for dim in range(3):
@@ -190,21 +198,42 @@ class QCartProMP(object):
         # Orientation
         if self.with_orientation:
             ax = f.add_subplot(122)
-            for dim in range(3):
-                ax.errorbar(dim, mean[dim], self.std_factor * std[dim], color=colors[dim % len(colors)], elinewidth=20)
+            ax.set_title('End effector orientation (x, y, z, w)')
+            for dim in range(4):
+                ax.errorbar(dim, mean[dim+3], self.std_factor * std[dim+3], color=colors[dim % len(colors)], elinewidth=20)
                 ax.plot(dim, eef[1][dim], marker='o', markerfacecolor='red', markersize=10)
                 for point in self.plotted_points:
-                    ax.plot(dim, point[1][dim], marker='o', markerfacecolor='black', markersize=7)
+                    ax.plot(dim, point[1][dim], marker='o', markerfacecolor='black' if is_goal else 'grey',
+                            markersize=7 if is_goal else 5)
             ax.set_ylim([-3.15, 3.15])
 
         # Save plots
         if path != '':
             if not exists(path):
                 makedirs(path)
-            filename = '_'.join(['mp' + stamp, 'demo' + str(self.plot_id), 'goal' if is_goal else ''])
-            self.plot_id += 1
+            filename = '_'.join(['cartesian', stamp])
             self.plotted_points.append(eef)
-            f.set_size_inches(12.8, 10.24)
             plt.savefig(join(path, filename) + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
         else:
             plt.show()
+        plt.close('all')
+
+    def plot_demos(self, path=''):
+        yt = self.Y.transpose(2, 0, 1)
+        for joint_id, joint in enumerate(yt):
+            f = plt.figure(facecolor="white")
+            ax = f.add_subplot(111)
+            ax.set_title('Joint {}'.format(joint_id))
+            for demo_id, demo in enumerate(joint):
+                ax.plot(self.x, demo, label='Demo {}'.format(demo_id))
+            plt.legend()
+            # Save or show plots
+            if path != '':
+                if not exists(path):
+                    makedirs(path)
+                filename = 'joint_{}_demos'.format(joint_id)
+                f.set_size_inches(12.8, 10.24)
+                plt.savefig(join(path, filename) + '.svg', dpi=100, facecolor=f.get_facecolor(), transparent=False)
+            else:
+                plt.show()
+            plt.close('all')

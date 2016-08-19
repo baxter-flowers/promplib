@@ -14,7 +14,7 @@ class QCartProMP(object):
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
-        self.context_length = 6 if with_orientation else 3
+        self.context_length = 7 if with_orientation else 3
         self.std_factor = std_factor
 
         self.mu = np.linspace(0, 1, self.num_basis)
@@ -83,7 +83,7 @@ class QCartProMP(object):
         model["Cov22"] = self.cov_W_full[self.nQ:, self.nQ:]
 
         inv_context = np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0]))
-        obs = np.hstack((goal[0], euler_from_quaternion(goal[1]))) if self.with_orientation else goal[0]
+        obs = np.hstack(goal) if self.with_orientation else goal[0]
         mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(inv_context, obs - self.mean_W_full[self.nQ:]))
         Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(inv_context, model["Cov21"]))
 
@@ -114,7 +114,11 @@ class QCartProMP(object):
         self.Y = np.vstack((self.Y, [demonstration]))  # If necessary to review the demo later?
 
         # here we concatenate with joint trajectories the final Cartesian position as a context
-        context = np.hstack((eef_pose[0], euler_from_quaternion(eef_pose[1]))) if self.with_orientation else eef_pose[0]
+        if eef_pose[1][3] < 0:
+            eef_pose_rpy = [eef_pose[0], -np.array(eef_pose[1])]
+        else:
+            eef_pose_rpy = eef_pose
+        context = np.hstack(eef_pose_rpy) if self.with_orientation else eef_pose[0]
         assert len(context) == self.context_length, \
             "The provided context (eef pose) has {} dims while {} have been declared".format(len(context), self.context_length)
         self.contexts.append(np.array(context).reshape((1, self.context_length)))
@@ -124,17 +128,24 @@ class QCartProMP(object):
 
         # here we flatten all joint trajectories
         self.W_full = np.vstack((self.W_full, demo_and_context))
-
         self.mean_W_full = np.mean(self.W_full, axis=0)
         if self.num_demos > 1:
             self.cov_W_full = np.cov(self.W_full.T, bias=0)
 
-    def generate_trajectory(self, goal):
+        self.plot_step(eef_pose_rpy, 'demo_{}'.format(self.num_demos-1), path='/tmp/plots')
+
+    def generate_trajectory(self, goal, path_plot=''):
         """
-        Generate a joint trajectory when a goal has preliminarily been set
+        Generate a joint trajectory to the given goal
+        :param goal: [[x, y, z], [x, y, z, w]]
+        :param path_plot:
         :return:
         """
-        meanNew, CovNew = self.gaussian_conditioning_joints(goal)
+        if goal[1][3] < 0:
+            goal_rpy = [goal[0], -np.array(goal[1])] #[goal[0], euler_from_quaternion(goal[1])]
+        else:
+            goal_rpy = goal
+        meanNew, CovNew = self.gaussian_conditioning_joints(goal_rpy)
         output = []
         for joint in range(self.num_joints):
             output.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))

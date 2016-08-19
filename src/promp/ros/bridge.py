@@ -46,6 +46,14 @@ class ROSBridge(object):
         raise TypeError("ROSBridge.path_last_point_to_numpy only accepts Path or PoseStamped, got {}".format(type(path)))
 
     @staticmethod
+    def trajectory_last_point_to_state(trajectory):
+        trajectory = ROSBridge.to_joint_trajectory(trajectory)
+        rs = RobotState()
+        rs.joint_state.name = trajectory.joint_names
+        rs.joint_state.position = trajectory.points[-1].positions
+        return rs
+
+    @staticmethod
     def path_to_numpy(path):
         path_list = []
         if isinstance(path, Path):

@@ -9,7 +9,7 @@ class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.01, num_samples=100, with_orientation=True, std_factor=2, arm='right'):
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, arm='right'):
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation

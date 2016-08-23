@@ -4,7 +4,7 @@ from .bridge import ROSBridge
 
 
 class QCartProMP(_QCartProMP):
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.01, num_samples=100, with_orientation=True, std_factor=2):
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2):
         super(QCartProMP, self).__init__(num_joints, num_basis, sigma, noise, num_samples, with_orientation, std_factor)
         self._durations = []
         self.joint_names = []

@@ -1,4 +1,5 @@
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+from sensor_msgs.msg import JointState
 from geometry_msgs.msg import PoseStamped
 from moveit_msgs.msg import RobotTrajectory, RobotState
 from nav_msgs.msg import Path
@@ -13,6 +14,14 @@ class ROSBridge(object):
         elif not isinstance(trajectory, JointTrajectory):
             raise TypeError("ROSBridge.to_joint_trajectory only accepts RT or JT, got {}".format(type(trajectory)))
         return trajectory
+
+    @staticmethod
+    def to_joint_state(state):
+        if isinstance(state, RobotState):
+            state = state.joint_state
+        elif not isinstance(state, JointState):
+            raise TypeError("ROSBridge.to_joint_trajectory only accepts RT or JT, got {}".format(type(trajectory)))
+        return state
 
     @staticmethod
     def numpy_to_trajectory(trajectory, joint_names, duration):
@@ -66,3 +75,8 @@ class ROSBridge(object):
     def trajectory_to_numpy(trajectory):
         trajectory = ROSBridge.to_joint_trajectory(trajectory)
         return [jtp.positions for jtp in trajectory.points]
+
+    @staticmethod
+    def state_to_numpy(state):
+        state = ROSBridge.to_joint_state(state)
+        return state.position

@@ -30,13 +30,16 @@ class QCartProMP(_QCartProMP):
         eef_pose_array = ROSBridge.path_to_numpy(eef_pose)
         super(QCartProMP, self).add_demonstration(demo_array, eef_pose_array[-1])
 
-    def generate_trajectory(self, goal, duration=-1, path_plot=''):
+    def generate_trajectory(self, goal, duration=-1, path_plot='', goal_joint_state_plot=None):
         """
         Generate a new trajectory from the given demonstrations and parameters
-        :param goal: [[], []]
+        :param goal: [[x, y, z], [x, y, z, w]] Actual goal in cartesian space
         :param duration: Desired duration, auto if duration < 0
+        :param path_plot: Path of the debugging plots
+        :param goal_joint_state_plot: RobotState of the desired joint-space goal **for plotting/debugging only**
         :return: the generated RobotTrajectory message
         """
-        trajectory_array = super(QCartProMP, self).generate_trajectory(goal, path_plot)
+        joint_goal_plot = ROSBridge.state_to_numpy(goal_joint_state_plot) if goal_joint_state_plot is not None else None
+        trajectory_array = super(QCartProMP, self).generate_trajectory(goal, path_plot, joint_goal_plot)
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              float(self.mean_duration) if duration < 0 else duration)

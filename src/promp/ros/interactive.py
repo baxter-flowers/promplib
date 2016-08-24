@@ -29,7 +29,7 @@ class InteractiveProMP(_InteractiveProMP):
         Automatically determine whether it is added to an existing a new ProMP
         :param demonstration: Joint-space demonstration demonstration[time][joint]
         :param eef_demonstration: JointState or RobotState
-        :return:
+        :return: The ProMP id that received the demo
         """
         demonstration = ROSBridge.to_joint_trajectory(demonstration)
         self._durations.append(demonstration.points[-1].time_from_start.to_sec() - demonstration.points[0].time_from_start.to_sec())
@@ -41,3 +41,13 @@ class InteractiveProMP(_InteractiveProMP):
         trajectory_array = super(InteractiveProMP, self).generate_trajectory(force)
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              duration if duration > 0 else self.mean_duration)
+
+    def set_goal(self, x_des, joint_des=None):
+        """
+        Set a new task-space goal, and determine which primitive will be used
+        :param x_des: desired task-space goal
+        :param joint_des desired joint-space goal (RobotState) **ONLY used for plots**
+        :return: True if the goal has been taken into account, False if a new demo is needed to reach it
+        """
+        np_joint_des = ROSBridge.state_to_numpy(joint_des) if joint_des is not None else None
+        return super(InteractiveProMP, self).set_goal(x_des, np_joint_des)

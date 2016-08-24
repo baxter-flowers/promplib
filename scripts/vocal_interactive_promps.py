@@ -53,23 +53,12 @@ class VocalInteractiveProMPs(object):
             choice = self.read_user_input(['stop'])
 
         joints, eef = self.arm.recorder.stop()
-        self.say('Motion recorded, please wait...', blocking=False)
+        self.say('Recorded', blocking=True)
         if len(joints.joint_trajectory.points) == 0:
             self.say('This demo is empty, please retry')
         else:
-            try:
-                self.promp.add_demonstration(joints, eef)
-            except ValueError as e:
-                print(e)
-                self.say("Sorry I failed to record this demonstration")
-            else:
-                self.promp.plot([[eef.poses[-1].pose.position.x,
-                                  eef.poses[-1].pose.position.y,
-                                  eef.poses[-1].pose.position.z],
-                                 [eef.poses[-1].pose.orientation.x,
-                                  eef.poses[-1].pose.orientation.y,
-                                  eef.poses[-1].pose.orientation.z,
-                                  eef.poses[-1].pose.orientation.w]], path='/tmp/plots')
+            target_id = self.promp.add_demonstration(joints, eef)
+            self.say('Added to Pro MP {}'.format(target_id), blocking=False)
 
     def set_goal(self):
         if self.promp.num_primitives > 0:
@@ -80,8 +69,8 @@ class VocalInteractiveProMPs(object):
                 choice = self.read_user_input(['ready'])
 
             eef = self.arm.endpoint_pose()
-            goal_set = self.promp.set_goal(eef)
-            self.promp.plot(eef, True, path='/tmp/plots')
+            state = self.arm.get_current_state()
+            goal_set = self.promp.set_goal(eef, state)
             if goal_set:
                 self.say('I can reach this object, let me demonstrate', blocking=False)
                 self.arm.move_to_controlled(self.init)
@@ -93,7 +82,7 @@ class VocalInteractiveProMPs(object):
                 if self.arm.gripping():
                     self.say('Take it!')
                     self.arm.wait_for_human_grasp(ignore_gripping=False)
-                    self.arm.open()
+                self.arm.open()
             else:
                 self.say("I don't know how to reach this object. {}".format(self.promp.status_writing))
         else:
@@ -110,7 +99,7 @@ class VocalInteractiveProMPs(object):
                 needs_demo = 0 if self.promp.num_primitives == 0 else self.promp.need_demonstrations().keys()[0]
                 self.say("Record a demo for Pro MP {}".format(needs_demo))
                 if self.promp.num_demos == 0:
-                     self.say("Say stop to finish")
+                    self.say("Say stop to finish")
                 self.record_motion()
             else:
                 self.say('Do you want to record a motion or set a new goal?')
@@ -119,9 +108,11 @@ class VocalInteractiveProMPs(object):
                     self.record_motion()
                 elif choice == 'goal':
                     self.set_goal()
-            self.say('There are {} primitive{} and {} demonstration{}'.format(self.promp.num_primitives,
-                                                                  's' if self.promp.num_primitives > 1 else '',
-                                                                  self.promp.num_demos,
-                                                                  's' if self.promp.num_demos > 1 else ''))
+            if not rospy.is_shutdown():
+                self.say('There are {} primitive{} and {} demonstration{}'.format(self.promp.num_primitives,
+                                                                      's' if self.promp.num_primitives > 1 else '',
+                                                                      self.promp.num_demos,
+                                                                      's' if self.promp.num_demos > 1 else ''))
+        self.promp.plot_demos()
 
 VocalInteractiveProMPs().run()

@@ -6,7 +6,7 @@ class InteractiveProMP(object):
     """
     Represents a single skill as a set of several multi-joint proMPs in joint space, each best suited for a specific area
     """
-    def __init__(self, arm, epsilon_ok=0.1, with_orientation=True, min_num_demos=3, std_factor=2):
+    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2):
         """
         :param arm: string ID of the FK/IK group (left, right, ...)
         :param epsilon_ok: maximum acceptable cartesian distance to the goal
@@ -24,6 +24,7 @@ class InteractiveProMP(object):
         self.with_orientation = with_orientation
         self.min_num_demos = min_num_demos
         self.std_factor = std_factor
+        self.goal_id = -1
 
     @property
     def num_joints(self):
@@ -65,7 +66,7 @@ class InteractiveProMP(object):
         Automatically determine whether it is added to an existing a new ProMP
         :param demonstration: Joint-space demonstration demonstration[time][joint]
         :param last eef: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
-        :return:
+        :return: The ProMP id that received the demo
         """
         if self.promp_write_index == -1:   # Do not override this setting, the mp might have been forced to reach the minimum number of demos
             for promp_index, promp in enumerate(self.promps):
@@ -80,11 +81,12 @@ class InteractiveProMP(object):
 
         if self.promp_write_index == -1:
             # New ProMP requested
-            self.promps.append(QCartProMP(len(self.ik.joints), with_orientation=self.with_orientation, std_factor=self.std_factor))
+            self.promps.append(QCartProMP(len(self.ik.joints), with_orientation=self.with_orientation, std_factor=self.std_factor, mp_id=self.num_primitives))
             self.promp_write_index = self.num_primitives - 1
 
         # ProMP to be enriched identified, now add it the demonstration
         self.promps[self.promp_write_index].add_demonstration(demonstration, eef_demonstration[-1])
+        return self.promp_write_index
 
     def need_demonstrations(self):
         """
@@ -129,26 +131,32 @@ class InteractiveProMP(object):
         print("Distance = {}m from goal".format(distance))
         return reached
 
-    def set_goal(self, x_des):
+    def set_goal(self, x_des, joint_des=None):
         """
         Set a new task-space goal, and determine which primitive will be used
         :param x_des: desired task-space goal
+        :param joint_des desired joint-space goal **ONLY used for plots**
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
         self.promp_write_index = -1
+        self.goal_id += 1
         if self.num_primitives > 0:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, x_des):
-                    trajectory = promp.generate_trajectory(x_des)
+                    trajectory = promp.generate_trajectory(x_des, joint_des, 'goal_{}_set'.format(self.goal_id))
                     if self.is_reached(trajectory, x_des):
+                        print('MP {} goal {} is_reached=YES'.format(promp_index, self.goal_id))
                         self.goal = x_des
                         self.promp_read_index = promp_index
                         return True
                     else:
+                        print('MP {} goal {} is_reached=NO'.format(promp_index, self.goal_id))
                         self.promp_write_index = promp_index
                         self.promp_read_index = -1  # A new demo is requested
                         return False
                 else:
+                    print('MP {} goal {} is_a_target=NO'.format(promp_index, self.goal_id))
+                    _ = promp.generate_trajectory(x_des, joint_des, 'goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
                     self.promp_read_index = -1  # A new promp is requested
             return False
 
@@ -159,8 +167,8 @@ class InteractiveProMP(object):
         if not force and self.promp_read_index < 0:
             raise RuntimeError("No ProMP can reach this goal, use force=True to force")
 
-        return self.promps[self.promp_read_index].generate_trajectory(self.goal)
+        return self.promps[self.promp_read_index].generate_trajectory(self.goal, stamp='goal_{}_final'.format(self.goal_id))
 
-    def plot(self, eef, is_goal=False, path=''):
-        for promp_id, promp in enumerate(self.promps):
-            promp.plot(eef, str(promp_id), is_goal, path)
+    def plot_demos(self):
+        for promp in self.promps:
+            promp.plot_demos()

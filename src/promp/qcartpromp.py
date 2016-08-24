@@ -5,11 +5,12 @@ from os import makedirs
 import matplotlib.pyplot as plt
 
 
+
 class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, arm='right'):
+    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, path_plots='/tmp/plots', mp_id=-1):
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
@@ -37,8 +38,10 @@ class QCartProMP(object):
         self.mean_W_full = np.zeros(self.W_full.shape[1])
         self.cov_W_full = self.noise * np.ones((self.W_full.shape[1], self.W_full.shape[1]))
 
+        self.plots = join(path_plots, str(mp_id)) if mp_id > -1 else path_plots
         self.plotted_points = []
         self.colors = ['r', 'g', 'b', 'c', 'm', 'y', 'orange']
+        self.goal_id = 0
 
     def _generate_basis_fx(self, z, mu, sigma):
         z_minus_center = z - mu
@@ -150,14 +153,13 @@ class QCartProMP(object):
         if self.num_demos > 1:
             self.cov_W_full = np.cov(self.W_full.T, bias=0)
 
-        self.plot_cartesian_step(eef_pose, 'demo_{}'.format(self.num_demos - 1), path='/tmp/plots')
-        self.plot_joints_step('mean_std_demo_{}'.format(self.num_demos - 1), path='/tmp/plots')
+        self.plot_cartesian_step(eef_pose, False, 'demo_{}'.format(self.num_demos - 1))
+        self.plot_joints_step('mean_std_demo_{}'.format(self.num_demos - 1))
 
-    def generate_trajectory(self, cartesian_goal, path_plot='', joint_goal_plot=None):
+    def generate_trajectory(self, cartesian_goal, joint_goal_plot=None, stamp=''):
         """
         Generate a joint trajectory to the given cartesian goal
         :param cartesian_goal: [[x, y, z], [x, y, z, w]]
-        :param path_plot: Path of the debugging plots
         :param joint_goal_plot: [j1, j2, ... jn] joint values of the goal for plotting/debugging only
         :return:
         """
@@ -169,10 +171,17 @@ class QCartProMP(object):
             output.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
         output = np.array(output).T
 
-        if path_plot != '':
-            self.plot_cartesian_step(cartesian_goal, 'goal', True, path=path_plot)
+        if self.plots != '':
+            self.plot_cartesian_step(cartesian_goal, True, stamp)
             joint_goal = joint_goal_plot if joint_goal_plot is not None else output[-1, :]
-            self.plot_conditioned_joints_goal(joint_goal, output, 'end_conditioning', path=path_plot)
+
+            # Get mean and std goal
+            varNew = np.diagonal(CovNew)
+            var_goal, mean_goal = [], []
+            for joint in range(self.num_joints):
+                var_goal.append(np.dot(self.Gn, varNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
+                mean_goal.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
+            self.plot_conditioned_joints_goal(joint_goal, output, mean_goal, var_goal, '_'.join(['end_conditioning', stamp]))
         return output
 
     @property
@@ -191,7 +200,10 @@ class QCartProMP(object):
     def num_viapoints(self):
         return 0 if self.goal is None else 1
 
-    def plot_cartesian_step(self, eef, stamp='', is_goal=False, path=''):
+    def plot_cartesian_step(self, eef, is_goal=False, stamp=''):
+        if self.plots == '':
+            return
+
         mean = self.get_mean_context()
         std = self.get_std_context()
 
@@ -220,35 +232,45 @@ class QCartProMP(object):
             ax.set_ylim([-3.15, 3.15])
 
         # Save plots
-        if path != '':
-            if not exists(path):
-                makedirs(path)
-            filename = '_'.join(['cartesian', stamp])
-            plt.savefig(join(path, filename) + '.svg', dpi=100, transparent=False)
-        self.plotted_points.append(eef)
+        self._mk_dirs()
+        filename = '_'.join(['cartesian', stamp])
+        plt.savefig(join(self.plots, filename) + '.svg', dpi=100, transparent=False)
+        if not is_goal:
+            self.plotted_points.append(eef)
         plt.close('all')
 
-    def plot_conditioned_joints_goal(self, goal, obtained_traj, stamp, path='/tmp/plots'):
+    def plot_conditioned_joints_goal(self, goal, obtained_traj, mean_goal, var_goal, stamp):
+        if self.plots == '':
+            return
+
+        self._mk_dirs()
         color_id = 0
         mean_joints = self.get_mean_joints()
         std_joints = self.get_std_joints()
         for joint_id, joint in enumerate(goal):
             f = plt.figure(facecolor="white", figsize=(16, 12))
             ax = f.add_subplot(111)
-            ax.set_title('Conditioning joint {}: mean, {}std, output, goal'.format(joint_id, self.std_factor))
-            ax.plot(self.x, mean_joints[joint_id], label='Joint {}'.format(joint_id), color=self.colors[color_id], linestyle='dashed')
+            ax.set_title('Conditioning joint {}: mean, {}std, var(goal), output, goal'.format(joint_id, self.std_factor))
+            plt.plot(self.x, mean_joints[joint_id], label='Joint {}'.format(joint_id), color=self.colors[color_id], linestyle='dashed')
             plt.fill_between(self.x, mean_joints[joint_id] - self.std_factor*std_joints[joint_id],
                              mean_joints[joint_id] + self.std_factor*std_joints[joint_id],
+                             alpha=0.1, color=self.colors[color_id])
+            plt.plot(self.x, mean_goal[joint_id], color=self.colors[color_id])
+            plt.fill_between(self.x, mean_goal[joint_id] - var_goal[joint_id],
+                             mean_goal[joint_id] + var_goal[joint_id],
                              alpha=0.1, color=self.colors[color_id])
             plt.plot([1], [joint], marker='o', markerfacecolor=self.colors[color_id], markersize=7)
             plt.plot([1], [obtained_traj[-1, joint_id]], marker='o', markerfacecolor=self.colors[color_id], markersize=4)
             plt.plot(self.x, obtained_traj[:, joint_id], color=self.colors[color_id])
             color_id = (color_id + 1) % len(self.colors)
             end_stamp = '_'.join([stamp, 'joint', str(joint_id)])
-            plt.savefig(join(path, end_stamp) + '.svg', dpi=100, transparent=False)
+            plt.savefig(join(self.plots, end_stamp) + '.svg', dpi=100, transparent=False)
             plt.close('all')
 
-    def plot_joints_step(self, stamp, path='/tmp/plots'):
+    def plot_joints_step(self, stamp):
+        if self.plots == '':
+            return
+
         mean_joints = self.get_mean_joints()
         std_joints = self.get_std_joints()
         f = plt.figure(facecolor="white", figsize=(16, 12))
@@ -262,13 +284,14 @@ class QCartProMP(object):
                              alpha=0.1, color=self.colors[color_id])
             color_id = (color_id + 1) % len(self.colors)
         plt.legend(loc='upper left')
-        if not exists(path):
-            makedirs(path)
+        self._mk_dirs()
         filename = '_'.join(['joints', stamp])
-        plt.savefig(join(path, filename) + '.svg', dpi=100, transparent=False)
+        plt.savefig(join(self.plots, filename) + '.svg', dpi=100, transparent=False)
         plt.close('all')
 
-    def plot_demos(self, path):
+    def plot_demos(self):
+        if self.plots == '':
+            return
         yt = self.Y.transpose(2, 0, 1)
         for joint_id, joint in enumerate(yt):
             f = plt.figure(facecolor="white", figsize=(16, 12))
@@ -278,8 +301,11 @@ class QCartProMP(object):
                 ax.plot(self.x, demo, label='Demo {}'.format(demo_id))
             plt.legend()
             # Save or show plots
-            if not exists(path):
-                makedirs(path)
-            filename = 'demos_of_joint {}'.format(joint_id)
-            plt.savefig(join(path, filename) + '.svg', dpi=100, transparent=False)
+            self._mk_dirs()
+            filename = 'demos_of_joint_{}'.format(joint_id)
+            plt.savefig(join(self.plots, filename) + '.svg', dpi=100, transparent=False)
             plt.close('all')
+
+    def _mk_dirs(self):
+        if not exists(self.plots):
+            makedirs(self.plots)

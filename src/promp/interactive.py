@@ -10,15 +10,15 @@ class InteractiveProMP(object):
         """
         :param arm: string ID of the FK/IK group (left, right, ...)
         :param epsilon_ok: maximum acceptable cartesian distance to the goal
-        :param epsilon_new_demo: maximum cartesian distance to enrich an existing promp instead of creating a new
         :param with_orientation: True for context = position + orientation, False for context = position only
         :param min_num_demos: Minimum number of demos per primitive
+        :param std_factor: Factor applied to the cartesian standard deviation so within this range, the MP is valid
         """
         self.promps = []
         self.fk = FK(arm)
         self.ik = IK(arm)
         self.epsilon_ok = epsilon_ok
-        self.remaining_initial_demos = 3  # The first 3 demos will join the first primitive
+        self.remaining_initial_demos = min_num_demos  # The first 3 demos will join the first primitive
         self.promp_write_index = -1  # Stores the index of the promp to be enriched, -1 in "new proMP" mode, -2 in "spontaneous demo" mode
         self.promp_read_index = -1  # Stores the index of the promp to be read for the previously set goal, -1 if no goal is known
         self.with_orientation = with_orientation
@@ -65,7 +65,7 @@ class InteractiveProMP(object):
         Add a new  demonstration for this skill
         Automatically determine whether it is added to an existing a new ProMP
         :param demonstration: Joint-space demonstration demonstration[time][joint]
-        :param last eef: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
+        :param eef_demonstration: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
         :return: The ProMP id that received the demo
         """
         if self.promp_write_index == -1:   # Do not override this setting, the mp might have been forced to reach the minimum number of demos

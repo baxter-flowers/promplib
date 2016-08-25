@@ -17,7 +17,7 @@ class QCartProMP(_QCartProMP):
         """
         Add a new  demonstration and update the model
         :param demonstration: RobotTrajectory or JointTrajectory object
-        :param eef_pose: Path object of end effector or PoseStamped/list of the goal only
+        :param eef_pose: Path object of end effector
         :return:
         """
         demonstration = ROSBridge.to_joint_trajectory(demonstration)

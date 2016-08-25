@@ -176,12 +176,12 @@ class QCartProMP(object):
             joint_goal = joint_goal_plot if joint_goal_plot is not None else output[-1, :]
 
             # Get mean and std goal
-            varNew = np.diagonal(CovNew)
-            var_goal, mean_goal = [], []
+            stdNew = np.sqrt(np.diagonal(CovNew))
+            std_goal, mean_goal = [], []
             for joint in range(self.num_joints):
-                var_goal.append(np.dot(self.Gn, varNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
+                std_goal.append(np.dot(self.Gn, stdNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
                 mean_goal.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
-            self.plot_conditioned_joints_goal(joint_goal, output, mean_goal, var_goal, '_'.join(['end_conditioning', stamp]))
+            self.plot_conditioned_joints_goal(joint_goal, output, mean_goal, std_goal, '_'.join(['end_conditioning', stamp]))
         return output
 
     @property
@@ -239,7 +239,7 @@ class QCartProMP(object):
             self.plotted_points.append(eef)
         plt.close('all')
 
-    def plot_conditioned_joints_goal(self, goal, obtained_traj, mean_goal, var_goal, stamp):
+    def plot_conditioned_joints_goal(self, goal, obtained_traj, mean_goal, std_goal, stamp):
         if self.plots == '':
             return
 
@@ -256,8 +256,8 @@ class QCartProMP(object):
                              mean_joints[joint_id] + self.std_factor*std_joints[joint_id],
                              alpha=0.1, color=self.colors[color_id])
             plt.plot(self.x, mean_goal[joint_id], color=self.colors[color_id])
-            plt.fill_between(self.x, mean_goal[joint_id] - var_goal[joint_id],
-                             mean_goal[joint_id] + var_goal[joint_id],
+            plt.fill_between(self.x, mean_goal[joint_id] - self.std_factor*std_goal[joint_id],
+                             mean_goal[joint_id] + self.std_factor*std_goal[joint_id],
                              alpha=0.1, color=self.colors[color_id])
             plt.plot([1], [joint], marker='o', markerfacecolor=self.colors[color_id], markersize=7)
             plt.plot([1], [obtained_traj[-1, joint_id]], marker='o', markerfacecolor=self.colors[color_id], markersize=4)

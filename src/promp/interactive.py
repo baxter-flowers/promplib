@@ -60,6 +60,13 @@ class InteractiveProMP(object):
             return "goal is ready to be generated with Pro MP {}".format(self.promp_read_index)
         return "unknown"
 
+    def clear(self):
+        self.promps = []
+        self.remaining_initial_demos = self.min_num_demos
+        self.promp_write_index = -1
+        self.promp_read_index = -1
+        self.goal_id = -1
+
     def add_demonstration(self, demonstration, eef_demonstration):
         """
         Add a new  demonstration for this skill

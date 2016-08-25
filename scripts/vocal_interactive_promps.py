@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from promp.ros import InteractiveProMP
+from promp.ros import ReplayableInteractiveProMP
 from baxter_commander import ArmCommander
 from kinect2.client import Kinect2Client
 import rospy
@@ -9,9 +9,9 @@ import rospy
 rospy.init_node('vocal_interactive_promps')
 
 class VocalInteractiveProMPs(object):
-    def __init__(self, arm='right'):
+    def __init__(self, arm='right', dataset_id=-1):
         # MOTION
-        self.promp = InteractiveProMP(arm, with_orientation=True)
+        self.promp = ReplayableInteractiveProMP(arm, with_orientation=True, dataset_id=dataset_id)
         self.arm = ArmCommander(arm, ik='robot')
         self.init = self.arm.get_current_state()
 
@@ -114,5 +114,6 @@ class VocalInteractiveProMPs(object):
                                                                       self.promp.num_demos,
                                                                       's' if self.promp.num_demos > 1 else ''))
         self.promp.plot_demos()
+        self.promp.close()
 
 VocalInteractiveProMPs().run()

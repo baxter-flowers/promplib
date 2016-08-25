@@ -75,7 +75,14 @@ class InteractiveProMP(object):
         :param eef_demonstration: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
         :return: The ProMP id that received the demo
         """
-        if self.promp_write_index == -1:   # Do not override this setting, the mp might have been forced to reach the minimum number of demos
+        # This check ensures that after requesting a demo for this promp, we don't expect the user to provide such demo
+        # So normal target search will occur, whatever a demo has been previously requested for a specific promp or not
+        # Remove this check if we rely on the user to always provide a demo fot *that* promp if it has been requested
+        if self.promp_write_index != -1 and self.promps[self.promp_write_index].num_demos >= self.min_num_demos:
+            self.promp_write_index = -1
+
+        # Search for a target MP to add this demo to
+        if self.promp_write_index == -1:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, eef_demonstration[-1]):
                     self.promp_write_index = promp_index

@@ -25,6 +25,8 @@ class InteractiveProMP(object):
         self.min_num_demos = min_num_demos
         self.std_factor = std_factor
         self.goal_id = -1
+        self.generated_trajectory = None
+
 
     @property
     def num_joints(self):
@@ -66,6 +68,8 @@ class InteractiveProMP(object):
         self.promp_write_index = -1
         self.promp_read_index = -1
         self.goal_id = -1
+        self.generated_trajectory = None
+
 
     def add_demonstration(self, demonstration, eef_demonstration):
         """
@@ -157,8 +161,8 @@ class InteractiveProMP(object):
         if self.num_primitives > 0:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, x_des):
-                    trajectory = promp.generate_trajectory(x_des, joint_des, 'goal_{}_set'.format(self.goal_id))
-                    if self.is_reached(trajectory, x_des):
+                    self.generated_trajectory = promp.generate_trajectory(x_des, joint_des, 'set_goal_{}'.format(self.goal_id))
+                    if self.is_reached(self.generated_trajectory, x_des):
                         print('MP {} goal {} is_reached=YES'.format(promp_index, self.goal_id))
                         self.goal = x_des
                         self.promp_read_index = promp_index
@@ -170,7 +174,7 @@ class InteractiveProMP(object):
                         return False
                 else:
                     print('MP {} goal {} is_a_target=NO'.format(promp_index, self.goal_id))
-                    _ = promp.generate_trajectory(x_des, joint_des, 'goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
+                    _ = promp.generate_trajectory(x_des, joint_des, 'set_goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
                     self.promp_read_index = -1  # A new promp is requested
             return False
 
@@ -178,10 +182,10 @@ class InteractiveProMP(object):
         if self.goal is None:
             raise RuntimeError("No goal set, use set_goal first")
 
-        if not force and self.promp_read_index < 0:
+        if not force and self.generated_trajectory is None:
             raise RuntimeError("No ProMP can reach this goal, use force=True to force")
 
-        return self.promps[self.promp_read_index].generate_trajectory(self.goal, stamp='goal_{}_final'.format(self.goal_id))
+        return self.generated_trajectory
 
     def plot_demos(self):
         for promp in self.promps:

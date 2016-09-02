@@ -2,15 +2,30 @@ import numpy as np
 from scipy.interpolate import interp1d
 from os.path import join, exists
 from os import makedirs
+from .refiner import TrajectoryRefiner
 import matplotlib.pyplot as plt
-
 
 
 class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, path_plots='/tmp/plots', mp_id=-1):
+    def __init__(self, arm, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, path_plots='/tmp/plots', mp_id=-1):
+        """
+
+        :param arm: ID of the arm to get FK ('' if unused)
+        :param num_joints:
+        :param num_basis:
+        :param sigma:
+        :param noise:
+        :param num_samples:
+        :param with_orientation:
+        :param std_factor:
+        :param path_plots:
+        :param mp_id:
+        :return:
+        """
+        self.arm = arm
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
@@ -22,6 +37,7 @@ class QCartProMP(object):
         self.noise = noise
         self.sigma = sigma * np.ones(self.num_basis)
         self.Gn = self._generate_basis_fx(self.z, self.mu, self.sigma)
+        self.refiner = TrajectoryRefiner(self.arm, self.num_basis, self.Gn)
 
         self.my_linRegRidgeFactor = 1e-8 * np.ones((self.num_basis, self.num_basis))
         self.MPPI = np.dot(np.linalg.inv(np.dot(self.Gn.T, self.Gn) + self.my_linRegRidgeFactor), self.Gn.T)
@@ -156,19 +172,23 @@ class QCartProMP(object):
         self.plot_cartesian_step(eef_pose, False, 'demo_{}'.format(self.num_demos - 1))
         self.plot_joints_step('mean_std_demo_{}'.format(self.num_demos - 1))
 
-    def generate_trajectory(self, cartesian_goal, joint_goal_plot=None, stamp=''):
+    def generate_trajectory(self, cartesian_goal, refine=True, joint_goal_plot=None, stamp=''):
         """
         Generate a joint trajectory to the given cartesian goal
         :param cartesian_goal: [[x, y, z], [x, y, z, w]]
+        :param refine: True if the trajectory must be refined by optimization after generation
         :param joint_goal_plot: [j1, j2, ... jn] joint values of the goal for plotting/debugging only
-        :return:
+        :return: trajectory[point][joint]
         """
         if self.with_orientation and self.dist_to_mean(cartesian_goal[1]) > self.dist_to_mean(-np.array(cartesian_goal[1])):
             cartesian_goal = [cartesian_goal[0], -np.array(cartesian_goal[1])]
         meanNew, CovNew = self.gaussian_conditioning_joints(cartesian_goal)
+
+        refined_mean = self.refiner.refine_trajectory(meanNew, CovNew, cartesian_goal) if refine else meanNew
+
         output = []
         for joint in range(self.num_joints):
-            output.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
+            output.append(np.dot(self.Gn, refined_mean[joint*self.num_basis:(joint + 1) * self.num_basis]))
         output = np.array(output).T
 
         if self.plots != '':
@@ -178,10 +198,12 @@ class QCartProMP(object):
             # Get mean and std goal
             stdNew = np.sqrt(np.diagonal(CovNew))
             std_goal, mean_goal = [], []
+
             for joint in range(self.num_joints):
                 std_goal.append(np.dot(self.Gn, stdNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
                 mean_goal.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
             self.plot_conditioned_joints_goal(joint_goal, output, mean_goal, std_goal, '_'.join(['end_conditioning', stamp]))
+
         return output
 
     @property

@@ -4,8 +4,8 @@ from .bridge import ROSBridge
 
 
 class QCartProMP(_QCartProMP):
-    def __init__(self, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2):
-        super(QCartProMP, self).__init__(num_joints, num_basis, sigma, noise, num_samples, with_orientation, std_factor)
+    def __init__(self, arm, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2):
+        super(QCartProMP, self).__init__(arm, num_joints, num_basis, sigma, noise, num_samples, with_orientation, std_factor)
         self._durations = []
         self.joint_names = []
 
@@ -30,16 +30,17 @@ class QCartProMP(_QCartProMP):
         eef_pose_array = ROSBridge.path_to_numpy(eef_pose)
         super(QCartProMP, self).add_demonstration(demo_array, eef_pose_array[-1])
 
-    def generate_trajectory(self, cartesian_goal, goal_joint_state_plot=None, stamp='', duration=-1):
+    def generate_trajectory(self, cartesian_goal, refine=True, goal_joint_state_plot=None, stamp='', duration=-1):
         """
         Generate a new trajectory from the given demonstrations and parameters
         :param cartesian_goal: [[x, y, z], [x, y, z, w]] Actual goal in cartesian space
+        :param refine: True if the trajectory must be refined by optimization after generation
         :param stamp: string stamp for plot file names
         :param duration: Desired duration, auto if duration < 0
         :param goal_joint_state_plot: RobotState of the desired joint-space goal **for plotting/debugging only**
         :return: the generated RobotTrajectory message
         """
         joint_goal_plot = ROSBridge.state_to_numpy(goal_joint_state_plot) if goal_joint_state_plot is not None else None
-        trajectory_array = super(QCartProMP, self).generate_trajectory(cartesian_goal, joint_goal_plot, stamp)
+        trajectory_array = super(QCartProMP, self).generate_trajectory(cartesian_goal, refine, joint_goal_plot, stamp)
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              float(self.mean_duration) if duration < 0 else duration)

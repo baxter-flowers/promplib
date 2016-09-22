@@ -1,6 +1,8 @@
 from ..replayable import ReplayableInteractiveProMP as _ReplayableInteractiveProMP
 from .bridge import ROSBridge
 from numpy import mean
+from os.path import join
+import rospkg
 
 class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
     """
@@ -16,7 +18,10 @@ class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
         :param std_factor: Factor applied to the cartesian standard deviation so within this range, the MP is valid
         :param dataset_id: ID of the dataset to work with, id < 0 will create a new one
         """
-        super(ReplayableInteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor, dataset_id)
+        rospack = rospkg.RosPack()
+        path_ds = join(rospack.get_path('prompros'), 'datasets')
+        path_plots = join(rospack.get_path('prompros'), 'plots')
+        super(ReplayableInteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor, path_ds, dataset_id, path_plots)
         self._durations = []
         self.joint_names = []
 
@@ -56,4 +61,3 @@ class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
         trajectory_array = super(ReplayableInteractiveProMP, self).generate_trajectory(force)
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              duration if duration > 0 else self.mean_duration)
-

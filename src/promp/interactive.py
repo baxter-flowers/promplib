@@ -1,18 +1,20 @@
 from numpy.linalg import norm
 from .ik import FK, IK
 from .qcartpromp import QCartProMP
+from os.path import join
 
 class InteractiveProMP(object):
     """
     Represents a single skill as a set of several multi-joint proMPs in joint space, each best suited for a specific area
     """
-    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2):
+    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2, path_plots=''):
         """
         :param arm: string ID of the FK/IK group (left, right, ...)
         :param epsilon_ok: maximum acceptable cartesian distance to the goal
         :param with_orientation: True for context = position + orientation, False for context = position only
         :param min_num_demos: Minimum number of demos per primitive
         :param std_factor: Factor applied to the cartesian standard deviation so within this range, the MP is valid
+        :param path_plots: Path to output the plots, empty to disable
         """
         self.promps = []
         self.fk = FK(arm)
@@ -26,6 +28,7 @@ class InteractiveProMP(object):
         self.std_factor = std_factor
         self.goal_id = -1
         self.generated_trajectory = None
+        self.path_plots = path_plots
 
 
     @property

@@ -8,14 +8,15 @@ class InteractiveProMP(_InteractiveProMP):
     Represents a single skill as a set of several multi-joint proMPs in joint space, each best suited for a specific area
     ROS Overlay
     """
-    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2):
+    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2, path_plots=''):
         """
         :param arm: string ID of the FK/IK group (left, right, ...)
         :param epsilon_ok: maximum acceptable cartesian distance to the goal
         :param with_orientation: True for context = position + orientation, False for context = position only
         :param min_num_demos: Minimum number of demos per primitive
+        :param path_plots: Path to output the plots, empty to disable
         """
-        super(InteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor)
+        super(InteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor, path_plots)
         self._durations = []
         self.joint_names = []
 

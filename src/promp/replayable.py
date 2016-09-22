@@ -7,22 +7,27 @@ class ReplayableInteractiveProMP(InteractiveProMP):
     """
     Interactive ProMP that also stores the sequence of demos and goal requests for comparison
     """
-    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2, dataset_id=-1):
+    def __init__(self, arm, epsilon_ok=0.03, with_orientation=True, min_num_demos=3, std_factor=2, path_ds='.', dataset_id=-1, path_plots='/tmp/plots'):
         """
         :param arm: string ID of the FK/IK group (left, right, ...)
         :param epsilon_ok: maximum acceptable cartesian distance to the goal
         :param with_orientation: True for context = position + orientation, False for context = position only
         :param min_num_demos: Minimum number of demos per primitive
         :param std_factor: Factor applied to the cartesian standard deviation so within this range, the MP is valid
+        :param path_ds: path to the datasets folder
         :param dataset_id: ID of the dataset to work with, id < 0 will create a new one
+        :param path_plots: path to the plots folder ('' to disable)
         """
+        self.id = dataset_id
+
         def get_dataset_path(dataset_id):
-            return join('datasets', 'dataset_{}'.format(dataset_id))
+            return join(path_ds, 'dataset_{}'.format(dataset_id))
 
         def generate_next_dataset():
             for id in range(100):
                 path = get_dataset_path(id)
                 if not exists(path):
+                    self.id = id
                     return path
 
         self.dataset_path = generate_next_dataset() if dataset_id < 0 else get_dataset_path(dataset_id)
@@ -32,7 +37,8 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         self.record_demo_id = 0
         self.record_goal_id = 0
         self.sequence = []
-        super(ReplayableInteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor)
+        super(ReplayableInteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor,
+                                                         join(path_plots, 'dataset_{}'.format(self.id)))
 
     def add_demonstration(self, demonstration, eef_demonstration):
         """

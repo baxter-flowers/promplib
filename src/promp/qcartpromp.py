@@ -10,7 +10,7 @@ class QCartProMP(object):
     """
     n-dimensional probabilistic MP storing joints (Q) and end effector (Cart)
     """
-    def __init__(self, arm, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, path_plots='/tmp/plots', mp_id=-1):
+    def __init__(self, arm, num_joints=7, num_basis=20, sigma=0.05, noise=.0001, num_samples=100, with_orientation=True, std_factor=2, path_plots='/tmp/plots'):
         """
 
         :param arm: ID of the arm to get FK ('' if unused)
@@ -22,7 +22,6 @@ class QCartProMP(object):
         :param with_orientation:
         :param std_factor:
         :param path_plots:
-        :param mp_id:
         :return:
         """
         self.arm = arm
@@ -54,7 +53,7 @@ class QCartProMP(object):
         self.mean_W_full = np.zeros(self.W_full.shape[1])
         self.cov_W_full = self.noise * np.ones((self.W_full.shape[1], self.W_full.shape[1]))
 
-        self.plots = join(path_plots, str(mp_id)) if mp_id > -1 else path_plots
+        self.plots = path_plots
         self.plotted_points = []
         self.colors = ['r', 'g', 'b', 'c', 'm', 'y', 'orange']
         self.goal_id = 0
@@ -183,7 +182,6 @@ class QCartProMP(object):
         if self.with_orientation and self.dist_to_mean(cartesian_goal[1]) > self.dist_to_mean(-np.array(cartesian_goal[1])):
             cartesian_goal = [cartesian_goal[0], -np.array(cartesian_goal[1])]
         meanNew, CovNew = self.gaussian_conditioning_joints(cartesian_goal)
-
         refined_mean = self.refiner.refine_trajectory(meanNew, CovNew, cartesian_goal) if refine else meanNew
 
         output = []

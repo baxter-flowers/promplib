@@ -3,6 +3,8 @@ from .bridge import ROSBridge
 from numpy import mean
 from os.path import join
 import rospkg
+import json
+
 
 class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
     """
@@ -19,9 +21,9 @@ class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
         :param dataset_id: ID of the dataset to work with, id < 0 will create a new one
         """
         rospack = rospkg.RosPack()
-        path_ds = join(rospack.get_path('prompros'), 'datasets')
-        path_plots = join(rospack.get_path('prompros'), 'plots')
-        super(ReplayableInteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor, path_ds, dataset_id, path_plots)
+        self.path_ds = join(rospack.get_path('prompros'), 'datasets')
+        self.path_plots = join(rospack.get_path('prompros'), 'plots')
+        super(ReplayableInteractiveProMP, self).__init__(arm, epsilon_ok, with_orientation, min_num_demos, std_factor, self.path_ds, dataset_id, self.path_plots)
         self._durations = []
         self.joint_names = []
 
@@ -43,8 +45,16 @@ class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
 
         self._durations.append(demonstration.points[-1].time_from_start.to_sec() - demonstration.points[0].time_from_start.to_sec())
         self.joint_names = demonstration.joint_names
+
+        with open(join(self.dataset_path, 'durations.json'), 'w') as f:
+            json.dump(self._durations, f)
+
+        with open(join(self.dataset_path, 'joint_names.json'), 'w') as f:
+            json.dump(self.joint_names, f)
+
         demo_array = ROSBridge.trajectory_to_numpy(demonstration)
         eef_pose_array = ROSBridge.path_to_numpy(eef_demonstration)
+
         return super(ReplayableInteractiveProMP, self).add_demonstration(demo_array, eef_pose_array)
 
     def set_goal(self, x_des, joint_des=None):
@@ -61,3 +71,20 @@ class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
         trajectory_array = super(ReplayableInteractiveProMP, self).generate_trajectory(force)
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              duration if duration > 0 else self.mean_duration)
+
+    def play(self):
+        """
+        Play all the events of this trajectory from start (add demo, set goals, ...)
+        :return: the timeline of results of these goal or demo events
+        """
+        timeline = super(ReplayableInteractiveProMP, self).play()
+
+        with open(join(self.dataset_path, 'durations.json')) as f:
+            durations = json.load(f)
+        with open(join(self.dataset_path, 'joint_names.json')) as f:
+            joint_names = json.load(f)
+
+        for event in timeline:
+            if event['type'] == 'goal' and event['is_reached']:
+                event['trajectory'] = ROSBridge.numpy_to_trajectory(event['trajectory'], joint_names, float(mean(durations)))
+        return timeline

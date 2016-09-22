@@ -108,7 +108,9 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         else:
             joint_des = None
         self.record_goal_id += 1
-        return super(ReplayableInteractiveProMP, self).set_goal(x_des, joint_des)
+        result = super(ReplayableInteractiveProMP, self).set_goal(x_des, joint_des)
+        trajectory = super(ReplayableInteractiveProMP, self).generate_trajectory() if result else None
+        return result, trajectory
 
     def play(self):
         self.record_demo_id = 0
@@ -118,8 +120,12 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         with open(sequence_file) as f:
             self.sequence = json.load(f)
 
+        timeline = []
         for event in self.sequence:
             if event['type'] == 'demo':
                 self._play_next_demo(event['added_to'])
+                timeline.append({'type': 'demo', 'added_to': event['added_to']})
             elif event['type'] == 'goal':
-                self._play_next_goal()
+                is_reached, trajectory = self._play_next_goal()
+                timeline.append({'type': 'goal', 'is_reached': is_reached, 'trajectory': trajectory})
+        return timeline

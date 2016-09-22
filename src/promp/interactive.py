@@ -16,6 +16,8 @@ class InteractiveProMP(object):
         :param std_factor: Factor applied to the cartesian standard deviation so within this range, the MP is valid
         :param path_plots: Path to output the plots, empty to disable
         """
+        self.arm = arm
+        self.refine = True
         self.promps = []
         self.fk = FK(arm)
         self.ik = IK(arm)
@@ -73,7 +75,6 @@ class InteractiveProMP(object):
         self.goal_id = -1
         self.generated_trajectory = None
 
-
     def add_demonstration(self, demonstration, eef_demonstration):
         """
         Add a new  demonstration for this skill
@@ -102,7 +103,8 @@ class InteractiveProMP(object):
 
         if self.promp_write_index == -1:
             # New ProMP requested
-            self.promps.append(QCartProMP(len(self.ik.joints), with_orientation=self.with_orientation, std_factor=self.std_factor, mp_id=self.num_primitives))
+            self.promps.append(QCartProMP(self.arm, len(self.ik.joints), with_orientation=self.with_orientation, std_factor=self.std_factor,
+                                          path_plots=join(self.path_plots, 'mp_' + str(len(self.promps)))))
             self.promp_write_index = self.num_primitives - 1
 
         # ProMP to be enriched identified, now add it the demonstration
@@ -164,7 +166,7 @@ class InteractiveProMP(object):
         if self.num_primitives > 0:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, x_des):
-                    self.generated_trajectory = promp.generate_trajectory(x_des, joint_des, 'set_goal_{}'.format(self.goal_id))
+                    self.generated_trajectory = promp.generate_trajectory(x_des, self.refine, joint_des, 'set_goal_{}'.format(self.goal_id))
                     if self.is_reached(self.generated_trajectory, x_des):
                         print('MP {} goal {} is_reached=YES'.format(promp_index, self.goal_id))
                         self.goal = x_des

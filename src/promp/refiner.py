@@ -40,25 +40,26 @@ class RefiningCostFunction(CostFunction):
     def cost_likelihood(self, sample):
         # we remove the constant values from the cost and use -log of likelihood
         mean_diff = sample - self.mean
-        return np.dot(mean_diff.T, np.solve(self.cov, mean_diff))
+        return abs(np.dot(mean_diff.T, np.linalg.solve(self.cov, mean_diff)))
 
     def evaluate(self, sample):
         # Compute distance from sample to point
         trajectory = self.weights_to_trajectories(sample)
-        # cost_jerk = self.cost_cartesian_jerk(trajectory)
+        cost_jerk = self.cost_joint_jerk(trajectory)
         cost_precision = self.cost_precision(trajectory)
         cost_likelihood = self.cost_likelihood(sample)
-        cost = self.cost_factors[0] * cost_likelihood + self.cost_factors[1] * cost_precision
+        cost = self.cost_factors[0] * cost_likelihood + self.cost_factors[1] * cost_precision + self.cost_factors[2] * cost_jerk
+
         return cost, cost_likelihood, cost_precision
 
 
 class TrajectoryRefiner(object):
-    def __init__(self, arm, num_basis, Gn, factor_likelihood=1, factor_precision=1,
+    def __init__(self, arm, num_basis, Gn, factor_likelihood=1e-6, factor_precision=1, factor_jerk=0.2,
                  n_samples_per_update=20, n_updates=100):
         self.arm = arm
         self.num_basis = num_basis
         self.Gn = Gn
-        self.cost_factors = [factor_likelihood, factor_precision]
+        self.cost_factors = [factor_likelihood, factor_precision, factor_jerk]
         self.n_samples_per_update = n_samples_per_update
         self.n_updates = n_updates
 
@@ -74,10 +75,9 @@ class TrajectoryRefiner(object):
 
         eliteness = 10
         weighting_method = 'PI-BB'
-        covar_decay_factor = 0.8
+        covar_decay_factor = 0.99
         updater = UpdaterCovarDecay(eliteness, weighting_method, covar_decay_factor)
-        cost_function = RefiningCostFunction(self.arm, goal, self.num_basis, mean,
-                                             cov, self.Gn, self.cost_factors)
+        cost_function = RefiningCostFunction(self.arm, goal, mean, cov, self.num_basis, self.Gn, self.cost_factors)
 
         # import matplotlib.pyplot as plt
         # fig = plt.figure(1, figsize=(15, 5))

@@ -75,18 +75,19 @@ class InteractiveProMP(object):
         self.goal_id = -1
         self.generated_trajectory = None
 
-    def add_demonstration(self, demonstration, eef_demonstration):
+    def add_demonstration(self, demonstration, eef_demonstration, force=False):
         """
         Add a new  demonstration for this skill
         Automatically determine whether it is added to an existing a new ProMP
         :param demonstration: Joint-space demonstration demonstration[time][joint]
         :param eef_demonstration: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
+        :param force: Force the target ProMP to the write_index previously set
         :return: The ProMP id that received the demo
         """
         # This check ensures that after requesting a demo for this promp, we don't expect the user to provide such demo
         # So normal target search will occur, whatever a demo has been previously requested for a specific promp or not
         # Remove this check if we rely on the user to always provide a demo fot *that* promp if it has been requested
-        if self.promp_write_index != -1 and self.promps[self.promp_write_index].num_demos >= self.min_num_demos:
+        if not force and self.promp_write_index != -1 and self.promps[self.promp_write_index].num_demos >= self.min_num_demos:
             self.promp_write_index = -1
 
         # Search for a target MP to add this demo to

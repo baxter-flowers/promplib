@@ -179,7 +179,7 @@ class InteractiveProMP(object):
                         return False
                 else:
                     print('MP {} goal {} is_a_target=NO'.format(promp_index, self.goal_id))
-                    _ = promp.generate_trajectory(x_des, joint_des, 'set_goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
+                    _ = promp.generate_trajectory(x_des, self.refine, joint_des, 'set_goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
                     self.promp_read_index = -1  # A new promp is requested
             return False
 

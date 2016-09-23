@@ -85,16 +85,30 @@ class QCartProMP(object):
     def get_std_w(self):
         return np.sqrt(np.diagonal(self.get_cov_w()))
 
-    def get_mean_joints(self):
+    def get_mean_joints(self, source_mean=None):
+        if source_mean is None:
+            source_mean = self.get_mean_w()
+
         output = []
         for joint in range(self.num_joints):
-            output.append(np.dot(self.Gn, self.get_mean_w()[joint*self.num_basis:(joint + 1) * self.num_basis]))
+            output.append(np.dot(self.Gn, source_mean[joint*self.num_basis:(joint + 1) * self.num_basis]))
         return np.array(output)
 
-    def get_std_joints(self):
+    def get_std_joints(self, source_cov=None):
+        output = []
+        covs = self.get_cov_joints(source_cov)
+        for joint in range(self.num_joints):
+            output.append(np.sqrt(np.diagonal(covs[joint])))
+        return np.array(output)
+
+    def get_cov_joints(self, source_cov=None):
+        if source_cov is None:
+            source_cov = self.get_cov_w()
+
         output = []
         for joint in range(self.num_joints):
-            output.append(np.dot(self.Gn, self.get_std_w()[joint*self.num_basis:(joint + 1) * self.num_basis]))
+            cov_per_joint = source_cov[joint * self.num_basis:(joint + 1) * self.num_basis, joint * self.num_basis:(joint + 1) * self.num_basis]
+            output.append(0 * np.ones(len(self.Gn)) + np.dot(np.dot(self.Gn, cov_per_joint), self.Gn.T))
         return np.array(output)
 
     def gaussian_conditioning_joints(self, goal):
@@ -184,25 +198,16 @@ class QCartProMP(object):
         meanNew, CovNew = self.gaussian_conditioning_joints(cartesian_goal)
         refined_mean = self.refiner.refine_trajectory(meanNew, CovNew, cartesian_goal) if refine else meanNew
 
-        output = []
-        for joint in range(self.num_joints):
-            output.append(np.dot(self.Gn, refined_mean[joint*self.num_basis:(joint + 1) * self.num_basis]))
-        output = np.array(output).T
+        refined_mean_goal = self.get_mean_joints(refined_mean).T
 
         if self.plots != '':
             self.plot_cartesian_step(cartesian_goal, True, stamp)
-            joint_goal = joint_goal_plot if joint_goal_plot is not None else output[-1, :]
+            joint_goal = joint_goal_plot if joint_goal_plot is not None else refined_mean_goal[-1, :]
 
-            # Get mean and std goal
-            stdNew = np.sqrt(np.diagonal(CovNew))
-            std_goal, mean_goal = [], []
-
-            for joint in range(self.num_joints):
-                std_goal.append(np.dot(self.Gn, stdNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
-                mean_goal.append(np.dot(self.Gn, meanNew[joint*self.num_basis:(joint + 1) * self.num_basis]))
-            self.plot_conditioned_joints_goal(joint_goal, output, mean_goal, std_goal, '_'.join(['end_conditioning', stamp]))
-
-        return output
+            std_goal = self.get_std_joints(CovNew)
+            mean_goal = self.get_mean_joints(meanNew)  # Non-refined goal
+            self.plot_conditioned_joints_goal(joint_goal, refined_mean_goal, mean_goal, std_goal, '_'.join(['end_conditioning', stamp]))
+        return refined_mean_goal
 
     @property
     def num_joints(self):
@@ -267,21 +272,23 @@ class QCartProMP(object):
         color_id = 0
         mean_joints = self.get_mean_joints()
         std_joints = self.get_std_joints()
-        for joint_id, joint in enumerate(goal):
+        for joint_id, joint_goal in enumerate(goal):
             f = plt.figure(facecolor="white", figsize=(16, 12))
             ax = f.add_subplot(111)
             ax.set_title('Conditioning joint {}: mean, {}std, var(goal), output, goal'.format(joint_id, self.std_factor))
-            plt.plot(self.x, mean_joints[joint_id], label='Joint {}'.format(joint_id), color=self.colors[color_id], linestyle='dashed')
+            plt.plot(self.x, mean_joints[joint_id], label='Mean joint {}'.format(joint_id), color=self.colors[color_id], linestyle='dashed')
             plt.fill_between(self.x, mean_joints[joint_id] - self.std_factor*std_joints[joint_id],
                              mean_joints[joint_id] + self.std_factor*std_joints[joint_id],
                              alpha=0.1, color=self.colors[color_id])
-            plt.plot(self.x, mean_goal[joint_id], color=self.colors[color_id])
+            color_goal = '0.2'  # grey 20%
+            plt.plot(self.x, mean_goal[joint_id], color=color_goal, label='Conditioned traj joint {}'.format(joint_id), linestyle=':')
             plt.fill_between(self.x, mean_goal[joint_id] - self.std_factor*std_goal[joint_id],
                              mean_goal[joint_id] + self.std_factor*std_goal[joint_id],
-                             alpha=0.1, color=self.colors[color_id])
-            plt.plot([1], [joint], marker='o', markerfacecolor=self.colors[color_id], markersize=7)
-            plt.plot([1], [obtained_traj[-1, joint_id]], marker='o', markerfacecolor=self.colors[color_id], markersize=4)
-            plt.plot(self.x, obtained_traj[:, joint_id], color=self.colors[color_id])
+                             alpha=0.1, color=color_goal)
+            plt.plot([1], [joint_goal], marker='o', markerfacecolor=self.colors[color_id], markersize=7, label='Goal')
+            #plt.plot([1], [obtained_traj[-1, joint_id]], marker='o', markerfacecolor=self.colors[color_id], markersize=4)
+            plt.plot(self.x, obtained_traj[:, joint_id], color=self.colors[color_id], label='Refined output traj')
+            plt.legend(loc='upper left', scatterpoints = 1)
             color_id = (color_id + 1) % len(self.colors)
             end_stamp = '_'.join([stamp, 'joint', str(joint_id)])
             plt.savefig(join(self.plots, end_stamp) + '.svg', dpi=100, transparent=False)

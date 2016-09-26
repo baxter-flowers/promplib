@@ -17,7 +17,6 @@ class InteractiveProMP(object):
         :param path_plots: Path to output the plots, empty to disable
         """
         self.arm = arm
-        self.refine = True
         self.promps = []
         self.fk = FK(arm)
         self.ik = IK(arm)
@@ -31,6 +30,7 @@ class InteractiveProMP(object):
         self.goal_id = -1
         self.generated_trajectory = None
         self.path_plots = path_plots
+        self.noise = {'position': 0.005, 'orientation': 0.05}
 
 
     @property
@@ -124,14 +124,6 @@ class InteractiveProMP(object):
         """
         return {promp_id: self.min_num_demos - promp.num_demos for promp_id, promp in enumerate(self.promps) if promp.num_demos < self.min_num_demos}
 
-    @staticmethod
-    def _get_mean_std_position(promp):
-        std = promp.get_std_context()
-        mean = promp.get_mean_context()
-        position_std = std[:3]
-        position_mean = mean[:3]
-        return position_mean, position_std
-
     def _is_a_target(self, promp, goal):
         """
         Returns True whether the specified ProMP meets the requirements to be a possible target of the goal
@@ -139,12 +131,20 @@ class InteractiveProMP(object):
         :param goal: [[x, y, z], [qx, qy, qz, qw]]
         :return: bool
         """
-        position_mean, position_std = self._get_mean_std_position(promp)
+        std = promp.get_std_context()
+        mean = promp.get_mean_context()
         for dimension in range(3):
-            if not position_mean[dimension] - self.std_factor*position_std[dimension]\
-                    < goal[0][dimension]\
-                    < position_mean[dimension] + self.std_factor*position_std[dimension]:
+            if not (mean[dimension] - self.std_factor*std[dimension] - self.noise['position']
+                    < goal[0][dimension]
+                    < mean[dimension] + self.std_factor*std[dimension] + self.noise['position']):
                 return False
+
+        if self.with_orientation:
+            for dimension in range(4):
+                if not (mean[dimension+3] - self.std_factor * std[dimension+3] - self.noise['orientation']
+                        < goal[1][dimension]
+                        < mean[dimension+3] + self.std_factor * std[dimension+3] + self.noise['orientation']):
+                    return False
         return True
 
     def is_reached(self, trajectory, goal):

@@ -3,6 +3,7 @@ from scipy.interpolate import interp1d
 from os.path import join, exists
 from os import makedirs
 from .refiner import TrajectoryRefiner
+from .ik import FK
 import matplotlib.pyplot as plt
 
 
@@ -24,7 +25,7 @@ class QCartProMP(object):
         :param path_plots:
         :return:
         """
-        self.arm = arm
+        self.fk = FK(arm)
         self.num_basis = num_basis
         self.nrTraj = num_samples
         self.with_orientation = with_orientation
@@ -36,7 +37,7 @@ class QCartProMP(object):
         self.noise = noise
         self.sigma = sigma * np.ones(self.num_basis)
         self.Gn = self._generate_basis_fx(self.z, self.mu, self.sigma)
-        self.refiner = TrajectoryRefiner(self.arm, self.num_basis, self.Gn)
+        self.refiner = TrajectoryRefiner(self.fk, self.num_basis, self.Gn, factor_orientation=3.14 if self.with_orientation else 0)
 
         self.my_linRegRidgeFactor = 1e-8 * np.ones((self.num_basis, self.num_basis))
         self.MPPI = np.dot(np.linalg.inv(np.dot(self.Gn.T, self.Gn) + self.my_linRegRidgeFactor), self.Gn.T)
@@ -197,7 +198,8 @@ class QCartProMP(object):
             cartesian_goal = [cartesian_goal[0], -np.array(cartesian_goal[1])]
         meanNew, CovNew = self.gaussian_conditioning_joints(cartesian_goal)
         refined_mean = self.refiner.refine_trajectory(meanNew, CovNew, cartesian_goal) if refine else meanNew
-
+        print('conditioned', self.refiner.cost_function.evaluate(meanNew))
+        print('refined', self.refiner.cost_function.evaluate(refined_mean))
         refined_mean_goal = self.get_mean_joints(refined_mean).T
 
         if self.plots != '':
@@ -206,6 +208,7 @@ class QCartProMP(object):
 
             std_goal = self.get_std_joints(CovNew)
             mean_goal = self.get_mean_joints(meanNew)  # Non-refined goal
+            self.plot_cartesian_goal_difference(self.fk.get(refined_mean_goal[-1]), self.fk.get(mean_goal.T[-1]), cartesian_goal, stamp)
             self.plot_conditioned_joints_goal(joint_goal, refined_mean_goal, mean_goal, std_goal, '_'.join(['end_conditioning', stamp]))
         return refined_mean_goal
 
@@ -254,7 +257,7 @@ class QCartProMP(object):
                 ax.plot(dim, eef[1][dim], marker='o', markerfacecolor='red', markersize=10)
                 for point in self.plotted_points:
                     ax.plot(dim, point[1][dim], marker='o', markerfacecolor='black', markersize=7)
-            ax.set_ylim([-3.15, 3.15])
+            ax.set_ylim([-1.1, 1.1])
 
         # Save plots
         self._mk_dirs()
@@ -262,6 +265,42 @@ class QCartProMP(object):
         plt.savefig(join(self.plots, filename) + '.svg', dpi=100, transparent=False)
         if not is_goal:
             self.plotted_points.append(eef)
+        plt.close('all')
+
+    def plot_cartesian_goal_difference(self, refined_eef, conditioned_eef, goal_eef, stamp=''):
+        if self.plots == '':
+            return
+
+        mean = self.get_mean_context()
+        std = self.get_std_context()
+
+        f = plt.figure(facecolor="white", figsize=(16, 12))
+
+        # Difference in position
+        ax = f.add_subplot(121) if self.with_orientation else f.add_subplot(111)
+        ax.set_title('End effector position (x, y, z)')
+
+        refined_diff_pose = np.array(goal_eef) - refined_eef
+        conditioned_diff_pose = np.array(goal_eef) - conditioned_eef
+        for dim in range(3):
+            ax.plot(dim, refined_diff_pose[0][dim], marker='o', markerfacecolor='g', markersize=7, label='refined')
+            ax.plot(dim, conditioned_diff_pose[0][dim], marker='o', markerfacecolor='r', markersize=7, label='conditoned')
+        ax.set_ylim([-0.05, 0.05])
+
+        # Difference in orientation
+        if self.with_orientation:
+            ax = f.add_subplot(122)
+            ax.set_title('End effector orientation (x, y, z, w)')
+            for dim in range(4):
+                ax.plot(dim, refined_diff_pose[1][dim], marker='o', markerfacecolor='g', markersize=7, label='refined')
+                ax.plot(dim, conditioned_diff_pose[1][dim], marker='o', markerfacecolor='r', markersize=7, label='conditoned')
+            ax.set_ylim([-0.5, 0.5])
+
+        # Save plots
+        self._mk_dirs()
+        filename = '_'.join(['cartesian_goal_difference', stamp])
+        plt.legend(loc='upper left')
+        plt.savefig(join(self.plots, filename) + '.svg', dpi=100, transparent=False)
         plt.close('all')
 
     def plot_conditioned_joints_goal(self, goal, obtained_traj, mean_goal, std_goal, stamp):

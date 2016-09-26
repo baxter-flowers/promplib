@@ -72,12 +72,14 @@ class ReplayableInteractiveProMP(_ReplayableInteractiveProMP):
         return ROSBridge.numpy_to_trajectory(trajectory_array, self.joint_names,
                                              duration if duration > 0 else self.mean_duration)
 
-    def play(self):
+    def play(self, keep_targets=True, refining=True):
         """
         Play all the events of this trajectory from start (add demo, set goals, ...)
+        :param keep_targets: True to replay the sequence by respecting the same MP targets, False to recompute the best target
+        :param refining: True to enable post-process refining, False to disable
         :return: the timeline of results of these goal or demo events
         """
-        timeline = super(ReplayableInteractiveProMP, self).play()
+        timeline = super(ReplayableInteractiveProMP, self).play(keep_targets, refining)
 
         with open(join(self.dataset_path, 'durations.json')) as f:
             durations = json.load(f)

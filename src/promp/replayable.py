@@ -98,7 +98,7 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         return super(ReplayableInteractiveProMP, self).add_demonstration(demonstration, eef_demonstration,
                                                                          force_mp_target=promp_target)
 
-    def _play_next_goal(self):
+    def _play_next_goal(self, refining=True):
         cartesian_goal_file = join(self.dataset_path, 'cart_goal_{}.json'.format(self.record_goal_id))
         joint_goal_file = join(self.dataset_path, 'joint_goal_{}.json'.format(self.record_goal_id))
         with open(cartesian_goal_file) as f:
@@ -109,11 +109,17 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         else:
             joint_des = None
         self.record_goal_id += 1
-        result = super(ReplayableInteractiveProMP, self).set_goal(x_des, joint_des)
+        result = super(ReplayableInteractiveProMP, self).set_goal(x_des, joint_des, refining)
         trajectory = super(ReplayableInteractiveProMP, self).generate_trajectory() if result else None
         return result, trajectory
 
-    def play(self):
+    def play(self, keep_targets=True, refining=True):
+        """
+        Replay this sequence
+        :param keep_targets: True to replay the sequence by respecting the same MP targets, False to recompute the best target
+        :param refining: True to enable post-process refining, False to disable
+        :return: the timeline of results of these goal or demo events
+        """
         self.record_demo_id = 0
         self.record_goal_id = 0
 
@@ -124,9 +130,9 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         timeline = []
         for event in self.sequence:
             if event['type'] == 'demo':
-                self._play_next_demo(event['added_to'])
-                timeline.append({'type': 'demo', 'added_to': event['added_to']})
+                target = self._play_next_demo(event['added_to'] if keep_targets else -1)
+                timeline.append({'type': 'demo', 'added_to': target})
             elif event['type'] == 'goal':
-                is_reached, trajectory = self._play_next_goal()
+                is_reached, trajectory = self._play_next_goal(refining)
                 timeline.append({'type': 'goal', 'is_reached': is_reached, 'trajectory': trajectory})
         return timeline

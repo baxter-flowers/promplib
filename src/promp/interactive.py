@@ -160,11 +160,12 @@ class InteractiveProMP(object):
         print("Distance = {}m from goal".format(distance))
         return reached
 
-    def set_goal(self, x_des, joint_des=None):
+    def set_goal(self, x_des, joint_des=None, refining=True):
         """
         Set a new task-space goal, and determine which primitive will be used
         :param x_des: desired task-space goal
         :param joint_des desired joint-space goal **ONLY used for plots**
+        :param refining: True to refine the trajectory by optimization after conditioning
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
         self.promp_write_index = -1
@@ -172,7 +173,7 @@ class InteractiveProMP(object):
         if self.num_primitives > 0:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, x_des):
-                    self.generated_trajectory = promp.generate_trajectory(x_des, self.refine, joint_des, 'set_goal_{}'.format(self.goal_id))
+                    self.generated_trajectory = promp.generate_trajectory(x_des, refining, joint_des, 'set_goal_{}'.format(self.goal_id))
                     if self.is_reached(self.generated_trajectory, x_des):
                         print('MP {} goal {} is_reached=YES'.format(promp_index, self.goal_id))
                         self.goal = x_des
@@ -185,7 +186,7 @@ class InteractiveProMP(object):
                         return False
                 else:
                     print('MP {} goal {} is_a_target=NO'.format(promp_index, self.goal_id))
-                    _ = promp.generate_trajectory(x_des, self.refine, joint_des, 'set_goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
+                    _ = promp.generate_trajectory(x_des, refining, joint_des, 'set_goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
                     self.promp_read_index = -1  # A new promp is requested
             return False
 

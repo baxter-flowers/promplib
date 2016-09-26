@@ -198,8 +198,6 @@ class QCartProMP(object):
             cartesian_goal = [cartesian_goal[0], -np.array(cartesian_goal[1])]
         meanNew, CovNew = self.gaussian_conditioning_joints(cartesian_goal)
         refined_mean = self.refiner.refine_trajectory(meanNew, CovNew, cartesian_goal) if refine else meanNew
-        print('conditioned', self.refiner.cost_function.evaluate(meanNew))
-        print('refined', self.refiner.cost_function.evaluate(refined_mean))
         refined_mean_goal = self.get_mean_joints(refined_mean).T
 
         if self.plots != '':

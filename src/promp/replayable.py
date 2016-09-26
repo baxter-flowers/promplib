@@ -94,8 +94,9 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         with open(eef_demonstration_file) as f:
             eef_demonstration = json.load(f)
         self.record_demo_id += 1
-        self.promp_write_index = -1 if self.num_primitives <= receiving_promp else receiving_promp
-        return super(ReplayableInteractiveProMP, self).add_demonstration(demonstration, eef_demonstration, force=True)
+        promp_target = -1 if self.num_primitives <= receiving_promp else receiving_promp
+        return super(ReplayableInteractiveProMP, self).add_demonstration(demonstration, eef_demonstration,
+                                                                         force_mp_target=promp_target)
 
     def _play_next_goal(self):
         cartesian_goal_file = join(self.dataset_path, 'cart_goal_{}.json'.format(self.record_goal_id))

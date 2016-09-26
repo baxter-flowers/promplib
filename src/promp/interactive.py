@@ -75,23 +75,16 @@ class InteractiveProMP(object):
         self.goal_id = -1
         self.generated_trajectory = None
 
-    def add_demonstration(self, demonstration, eef_demonstration, force=False):
+    def add_demonstration(self, demonstration, eef_demonstration, force_mp_target=-1):
         """
         Add a new  demonstration for this skill
         Automatically determine whether it is added to an existing a new ProMP
         :param demonstration: Joint-space demonstration demonstration[time][joint]
         :param eef_demonstration: Full end effector demo [[[x, y, z], [qx, qy, qz, qw]], [[x, y, z], [qx, qy, qz, qw]]...]
-        :param force: Force the target ProMP to the write_index previously set
-        :return: The ProMP id that received the demo
+        :param force_mp_target: Force the target ProMP to the specified target ID
+        :return: The ProMP id that received the demo (which is = to force_mp_target if force_mp_target >=0)
         """
-        # This check ensures that after requesting a demo for this promp, we don't expect the user to provide such demo
-        # So normal target search will occur, whatever a demo has been previously requested for a specific promp or not
-        # Remove this check if we rely on the user to always provide a demo fot *that* promp if it has been requested
-        if not force and self.promp_write_index != -1 and self.promps[self.promp_write_index].num_demos >= self.min_num_demos:
-            self.promp_write_index = -1
-
-        # Search for a target MP to add this demo to
-        if self.promp_write_index == -1:
+        def select_best_promp(eef_demonstration):
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, eef_demonstration[-1]):
                     self.promp_write_index = promp_index
@@ -101,6 +94,18 @@ class InteractiveProMP(object):
                     self.promp_write_index = -1
                     self.promp_read_index = -1  # This demo will end up to a new promp
                     # Don't break, search for a better one
+
+        if force_mp_target > -1:
+            self.promp_write_index = force_mp_target if self.num_primitives > force_mp_target else -1
+        elif self.promp_write_index != -1 and self.promps[self.promp_write_index].num_demos >= self.min_num_demos:
+            # This check ensures that after requesting a demo for this promp, we don't expect the user to provide such demo
+            # So normal target search will occur, whatever a demo has been previously requested for a specific promp or not
+            # Remove this check if we rely on the user to always provide a demo fot *that* promp if it has been requested
+            self.promp_write_index = -1
+            select_best_promp(eef_demonstration)
+        # Search for a target MP to add this demo to
+        elif self.promp_write_index == -1:
+            select_best_promp(eef_demonstration)
 
         if self.promp_write_index == -1:
             # New ProMP requested

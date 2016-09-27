@@ -71,6 +71,8 @@ class VocalInteractiveProMPs(object):
             eef = self.arm.endpoint_pose()
             state = self.arm.get_current_state()
             goal_set = self.promp.set_goal(eef, state)
+            for result in self.promp.goal_log:
+                rospy.loginfo(result)
             if goal_set:
                 self.say('I can reach this object, let me demonstrate', blocking=False)
                 self.arm.move_to_controlled(self.init)
@@ -93,27 +95,30 @@ class VocalInteractiveProMPs(object):
         self.kinect.tts.say(what, blocking)
 
     def run(self):
-        while not rospy.is_shutdown():
-            self.arm.move_to_controlled(self.init)
-            if len(self.promp.need_demonstrations()) > 0 or self.promp.num_primitives == 0:
-                needs_demo = 0 if self.promp.num_primitives == 0 else self.promp.need_demonstrations().keys()[0]
-                self.say("Record a demo for Pro MP {}".format(needs_demo))
-                if self.promp.num_demos == 0:
-                    self.say("Say stop to finish")
-                self.record_motion()
-            else:
-                self.say('Do you want to record a motion or set a new goal?')
-                choice = self.read_user_input(['record', 'goal'])
-                if choice == 'record':
+        try:
+            while not rospy.is_shutdown():
+                self.arm.move_to_controlled(self.init)
+                if len(self.promp.need_demonstrations()) > 0 or self.promp.num_primitives == 0:
+                    needs_demo = 0 if self.promp.num_primitives == 0 else self.promp.need_demonstrations().keys()[0]
+                    self.say("Record a demo for Pro MP {}".format(needs_demo))
+                    if self.promp.num_demos == 0:
+                        self.say("Say stop to finish")
                     self.record_motion()
-                elif choice == 'goal':
-                    self.set_goal()
-            if not rospy.is_shutdown():
-                self.say('There are {} primitive{} and {} demonstration{}'.format(self.promp.num_primitives,
-                                                                      's' if self.promp.num_primitives > 1 else '',
-                                                                      self.promp.num_demos,
-                                                                      's' if self.promp.num_demos > 1 else ''))
-        self.promp.plot_demos()
-        self.promp.close()
+                else:
+                    self.say('Do you want to record a motion or set a new goal?')
+                    choice = self.read_user_input(['record', 'goal'])
+                    if choice == 'record':
+                        self.record_motion()
+                    elif choice == 'goal':
+                        self.set_goal()
+                if not rospy.is_shutdown():
+                    self.say('There are {} primitive{} and {} demonstration{}'.format(self.promp.num_primitives,
+                                                                          's' if self.promp.num_primitives > 1 else '',
+                                                                          self.promp.num_demos,
+                                                                          's' if self.promp.num_demos > 1 else ''))
+        finally:
+            self.promp.plot_demos()
+            self.promp.close()
+            print("Your dataset has ID {} at {}".format(self.promp.id, self.promp.dataset_path))
 
 VocalInteractiveProMPs().run()

@@ -28,6 +28,7 @@ class InteractiveProMP(object):
         self.min_num_demos = min_num_demos
         self.std_factor = std_factor
         self.goal_id = -1
+        self.goal_log = []
         self.generated_trajectory = None
         self.path_plots = path_plots
         self.noise = {'position': 0.005, 'orientation': 0.05}
@@ -147,47 +148,45 @@ class InteractiveProMP(object):
                     return False
         return True
 
-    def is_reached(self, trajectory, goal):
-        """
-        Returns True whether the specified trajectory actually reaches the goal with accepted precision
-        :param trajectory: [[q1, q2, .. qn], [q1, q2, .. qn]]
-        :param goal: [[x, y, z], [qx, qy, qz, qw]]
-        :return: bool
-        """
+    def distance_from_goal(self, trajectory, goal):
         reached_goal = self.fk.get(trajectory[-1])
-        distance = norm(reached_goal[0] - goal[0])
-        reached = distance < self.epsilon_ok
-        print("Distance = {}m from goal".format(distance))
-        return reached
+        return norm(reached_goal[0] - goal[0])
 
     def set_goal(self, x_des, joint_des=None, refining=True):
         """
         Set a new task-space goal, and determine which primitive will be used
+        Flushes the previous goal log and update id with this goal in the same time
         :param x_des: desired task-space goal
         :param joint_des desired joint-space goal **ONLY used for plots**
         :param refining: True to refine the trajectory by optimization after conditioning
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
+        def distance_from_goal(trajectory, goal):
+            reached_goal = self.fk.get(trajectory[-1])
+            return norm(reached_goal[0] - goal[0])
+
         self.promp_write_index = -1
         self.goal_id += 1
+        self.goal_log = []
         if self.num_primitives > 0:
             for promp_index, promp in enumerate(self.promps):
                 if self._is_a_target(promp, x_des):
                     self.generated_trajectory = promp.generate_trajectory(x_des, refining, joint_des, 'set_goal_{}'.format(self.goal_id))
-                    if self.is_reached(self.generated_trajectory, x_des):
-                        print('MP {} goal {} is_reached=YES'.format(promp_index, self.goal_id))
+                    distance = distance_from_goal(self.generated_trajectory, x_des)
+                    if distance < self.epsilon_ok:
                         self.goal = x_des
                         self.promp_read_index = promp_index
+                        self.goal_log.append({"mp_id": promp_index, "is_a_target": True, "is_reached": True, "precision": distance})
                         return True
                     else:
-                        print('MP {} goal {} is_reached=NO'.format(promp_index, self.goal_id))
                         self.promp_write_index = promp_index
                         self.promp_read_index = -1  # A new demo is requested
+                        self.goal_log.append({"mp_id": promp_index, "is_a_target": True, "is_reached": False, "precision": distance})
                         return False
                 else:
-                    print('MP {} goal {} is_a_target=NO'.format(promp_index, self.goal_id))
                     _ = promp.generate_trajectory(x_des, refining, joint_des, 'set_goal_{}_not_a_target'.format(self.goal_id))  # Only for plotting
                     self.promp_read_index = -1  # A new promp is requested
+                    self.goal_log.append({"mp_id": promp_index, "is_a_target": False, "is_reached": False})
             return False
 
     def generate_trajectory(self, force=False):

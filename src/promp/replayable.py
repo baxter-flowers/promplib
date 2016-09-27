@@ -67,6 +67,7 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         :param joint_des desired joint-space goal **ONLY used for plots**
         :return: True if the goal has been taken into account, False if a new demo is needed to reach it
         """
+        ret = super(ReplayableInteractiveProMP, self).set_goal(x_des, joint_des)
         cartesian_goal_file = join(self.dataset_path, 'cart_goal_{}.json'.format(self.record_goal_id))
         joint_goal_file = join(self.dataset_path, 'joint_goal_{}.json'.format(self.record_goal_id))
         with open(cartesian_goal_file, 'w') as f:
@@ -74,9 +75,9 @@ class ReplayableInteractiveProMP(InteractiveProMP):
         if joint_des is not None:
             with open(joint_goal_file, 'w') as f:
                 json.dump(joint_des, f)
-        self.sequence.append({'type': 'goal'})
+        self.sequence.append({'type': 'goal', 'id': self.goal_id, 'log': self.goal_log})
         self.record_goal_id += 1
-        return super(ReplayableInteractiveProMP, self).set_goal(x_des, joint_des)
+        return ret
 
     def close(self):
         sequence_file = join(self.dataset_path, 'sequence.json')
@@ -134,5 +135,5 @@ class ReplayableInteractiveProMP(InteractiveProMP):
                 timeline.append({'type': 'demo', 'added_to': target})
             elif event['type'] == 'goal':
                 is_reached, trajectory = self._play_next_goal(refining)
-                timeline.append({'type': 'goal', 'is_reached': is_reached, 'trajectory': trajectory})
+                timeline.append({'type': 'goal', 'is_reached': is_reached, 'log': self.goal_log, 'trajectory': trajectory})
         return timeline

@@ -40,7 +40,7 @@ class QCartProMP(object):
         self.refiner = TrajectoryRefiner(self.fk, self.num_basis, self.Gn, factor_orientation=3.14 if self.with_orientation else 0)
 
         self.my_linRegRidgeFactor = 1e-8 * np.ones((self.num_basis, self.num_basis))
-        self.MPPI = np.dot(np.linalg.inv(np.dot(self.Gn.T, self.Gn) + self.my_linRegRidgeFactor), self.Gn.T)
+        self.MPPI = np.linalg.solve(np.dot(self.Gn.T, self.Gn) + self.my_linRegRidgeFactor, self.Gn.T)
         self.Y = np.empty((0, num_samples, num_joints), float)  # all demonstrations
         self.x = np.linspace(0, 1, num_samples)
 
@@ -132,10 +132,10 @@ class QCartProMP(object):
         model["Cov21"] = self.cov_W_full[self.nQ:, :self.nQ]
         model["Cov22"] = self.cov_W_full[self.nQ:, self.nQ:]
 
-        inv_context = np.linalg.inv(model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0]))
+        inv_context = model["Cov22"] + self.noise * np.eye(model["Cov22"].shape[0])
         obs = np.hstack(goal) if self.with_orientation else goal[0]
-        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.dot(inv_context, obs - self.mean_W_full[self.nQ:]))
-        Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.dot(inv_context, model["Cov21"]))
+        mean_wNew = self.mean_W_full[:self.nQ] + np.dot(model["Cov12"], np.linalg.solve(inv_context, obs - self.mean_W_full[self.nQ:]))
+        Cov_wNew = model["Cov11"] - np.dot(model["Cov12"], np.linalg.solve(inv_context, model["Cov21"]))
 
         return mean_wNew, Cov_wNew
 

@@ -9,14 +9,18 @@ The primitives are stored in joint-space but demonstrations are provided both in
 This work includes an interactive learning aspect which allows to automatically cluster motor primitives based on the standard deviation of their demonstrations. A new primitive is created automatically if the provided demonstration is out of 2 standard deviation of the existing primitives, otherwise the demonstration is distributed to an existing one.
 
 ## Classes
-![Class diagram](http://yuml.me/diagram/class/[QCartProMP]%3C0..*-++[InteractiveProMP],%20[ReplayableInteractiveProMP]-%5E[InteractiveProMP],%20[ROSQCartProMP]-%5E[QCartProMP],%20[ROSInteractiveProMP]-%5E[InteractiveProMP],%20[ROSReplayableInteractiveProMP]-%5E[ReplayableInteractiveProMP])
+![Class diagram](https://yuml.me/5dfe49ac)
 
- - `QCartProMP` is a "Q + Cartesian" probabilistic movement primitive, i.e. the mother class representing a joint-space primitive including a cartesian context (position + orientation).
+ - `ProMP` is a probabilistic movement primitive, the basic implementation for a single joint
+ - `NDProMP` is the same thing dealing with N joints
+ - `QCartProMP` is a "Q + Cartesian" probabilistic movement primitive, i.e. the mother class representing a joint-space primitive on N joints including a cartesian context (position + orientation).
  - `InteractiveQCartProMP` owns several `QCartProMP`, each corresponding to a cluster.
  - `ReplayabaleInteractiveQCartProMP` has the same interface than `InteractiveQCartProMP` except that it also dumps all actions (add a new demo or set a new goal) in files for further perfect replays of the sequence of actions.
  - Each of these classes has inputs and outputs in the form of Python lists, but has also a ROS overlay providing the same methods using ROS messages instead (mainly `JointTrajectory` and `JointState`).
 
 In general it is a good idea to always use the highest level (`ReplayableInteractiveProMP`) to be able to reproduce and compare results, but (`InteractiveProMP`) has the same behaviour and API without file persistence, recorded primitives die at program closure.
+
+Note: `QCartProMP` and `NDProMP` share the same concept, except that the first allows to set goals in cartesian space, the second in joint space. Depending of your usage your must select the primitive your need: `QCartProMP` handles most casual picking situations when the object pose is given in cartesian space, `NDPRoMP` is much more precise but requires to call in IK first since it only accepts joint space targets.
 
 ## Usage
 ### Direct usage with Baxter
